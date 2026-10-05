@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FFFFFF">
+  <title>La galerie collective · IAgora</title>
+  <link rel="stylesheet" href="/static/iagora.css">
+  <style>
+    .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 72px; padding: 0 clamp(16px, 4vw, 48px); background: rgba(255, 255, 255, .88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--shadow-sm); }
+    .brand { display: flex; align-items: baseline; gap: 12px; }
+    .container { width: min(1200px, calc(100vw - 32px)); margin: 0 auto; }
+    .hero { padding: 72px 0 40px; display: grid; gap: 16px; }
+    .hero .ia-display { font-size: clamp(44px, 6vw, 88px); }
+    .hero p { margin: 0; max-width: 760px; font-size: 20px; line-height: 1.6; color: var(--ink-700); }
+    .hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
+    .count { font: 400 22px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; color: var(--pink-600); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 28px; padding-bottom: 96px; }
+    .creation { display: grid; grid-template-rows: auto 1fr; padding: 0; border: 0; text-align: left; cursor: pointer; overflow: hidden; transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+    .creation:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .creation:active { transform: scale(.97); }
+    .creation { min-width: 0; }
+    .creation .frame { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; aspect-ratio: 3 / 2; background: var(--ink-100); padding: 18px; }
+    .creation img { max-width: 100%; max-height: 100%; min-width: 0; object-fit: contain; box-shadow: var(--shadow-md); background: var(--white); }
+    .creation .caption { display: grid; gap: 4px; padding: 16px 20px 20px; }
+    .creation h2 { font-size: 22px; color: var(--blue-600); }
+    .creation .meta { font-size: 14px; color: var(--ink-500); }
+    .creation.is-new { box-shadow: var(--shadow-accent); }
+    .empty { padding: 64px 32px; text-align: center; display: grid; justify-items: center; gap: 16px; background: var(--pink-50); border-radius: var(--radius-xl); margin-bottom: 96px; }
+    .empty .ia-heading { font-size: 32px; color: var(--blue-600); }
+    .empty p { margin: 0; color: var(--ink-700); }
+    .lightbox { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: rgba(20, 20, 26, .6); }
+    .lightbox-window { width: min(1100px, 100%); max-height: calc(100vh - 48px); display: grid; grid-template-rows: 1fr auto auto; overflow: hidden; }
+    .lightbox-image { display: grid; place-items: center; min-height: 0; padding: 24px; background: var(--ink-100); }
+    .lightbox-image img { max-width: 100%; max-height: calc(100vh - 220px); box-shadow: var(--shadow-lg); background: var(--white); }
+    .lightbox-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; }
+    .lightbox-bar .ia-heading { font-size: 26px; color: var(--blue-600); }
+    .lightbox-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .danger { color: var(--danger); }
+    .delete-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; padding: 14px 24px 18px; border-top: 2px solid var(--ink-100); background: var(--pink-50); }
+    .delete-form .ia-input { width: 220px; }
+    .delete-form p { margin: 0; flex-basis: 100%; font-size: 14px; color: var(--ink-700); }
+    .delete-form .error { color: var(--danger); font-weight: 600; }
+    footer { padding: 32px 0 48px; border-top: 2px solid var(--ink-900); font-size: 14px; color: var(--ink-500); }
+    @media (max-width: 640px) { .brand .ia-eyebrow { display: none; } .hero { padding-top: 40px; } .hero p { font-size: 17px; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <a class="ia-logo" href="/galerie" aria-label="IAgora, galerie collective"><b>IA</b>GORA</a>
+      <span class="ia-eyebrow">Atelier pixel art</span>
+    </div>
+    <a class="ia-btn ia-btn--primary" href="/" data-editor-link>Créer ma carte ➭</a>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <span class="ia-eyebrow">L'IA par tous et pour tous /</span>
+      <h1 class="ia-display">La galerie collective IAgora.</h1>
+      <p>Les cartes postales imaginées pendant l'atelier, vignette après vignette, avec un petit modèle d'IA qui tourne
+        directement dans le navigateur de chaque participant·e, sans passer par un service d'IA en ligne. Cliquez sur une carte pour l'agrandir ou la télécharger.</p>
+      <div class="hero-meta">
+        <span id="count" class="count"></span>
+      </div>
+    </section>
+    <section id="grid" class="grid" aria-live="polite"></section>
+    <section id="empty" class="empty" hidden>
+      <h2 class="ia-heading">La galerie attend sa première carte.</h2>
+      <p>Composez votre carte postale puis cliquez sur « Publier » : elle apparaîtra ici pour toutes et tous.</p>
+      <a class="ia-btn ia-btn--accent" href="/" data-editor-link>Je crée ma carte</a>
+    </section>
+    <footer id="footer">Galerie mise à jour automatiquement, cartes enregistrées en ligne.<br>
+      Atelier inspiré de <a href="https://github.com/unstonio/pixelgpt-24x24" target="_blank" rel="noopener">PixelGPT 24×24</a>
+      par unstonio, dont il réutilise le modèle de génération. Crédits complets dans « À propos » de l'éditeur ·
+      <a href="https://github.com/mamatdunet/pixelgptiagora" target="_blank" rel="noopener">code source</a>.</footer>
+  </main>
+
+  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle" hidden>
+    <div class="lightbox-window ia-card">
+      <div class="lightbox-image"><img id="lightboxImage" alt=""></div>
+      <div class="lightbox-bar">
+        <div>
+          <h2 id="lightboxTitle" class="ia-heading"></h2>
+          <span id="lightboxMeta" class="meta"></span>
+        </div>
+        <div class="lightbox-actions">
+          <a id="downloadLink" class="ia-btn ia-btn--outline ia-btn--sm" download>Télécharger</a>
+          <button id="deleteButton" class="ia-btn ia-btn--ghost ia-btn--sm danger" type="button">Supprimer</button>
+          <button id="closeLightbox" class="ia-btn ia-btn--primary ia-btn--sm" type="button">Fermer</button>
+        </div>
+      </div>
+      <form id="deleteForm" class="delete-form" hidden>
+        <p>Pour éviter les suppressions par mégarde, la suppression d'une carte demande le mot de passe de l'atelier.</p>
+        <label class="sr-only" for="deletePassword">Mot de passe</label>
+        <input id="deletePassword" class="ia-input" type="password" autocomplete="off" placeholder="Mot de passe" required>
+        <button class="ia-btn ia-btn--accent ia-btn--sm" type="submit">Supprimer définitivement</button>
+        <button id="cancelDelete" class="ia-btn ia-btn--ghost ia-btn--sm" type="button">Annuler</button>
+        <p id="deleteMessage" class="error" role="alert"></p>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const grid = document.querySelector('#grid');
+    const empty = document.querySelector('#empty');
+    const count = document.querySelector('#count');
+    const lightbox = document.querySelector('#lightbox');
+    const deleteButton = document.querySelector('#deleteButton');
+    const deleteForm = document.querySelector('#deleteForm');
+    const deletePassword = document.querySelector('#deletePassword');
+    const deleteMessage = document.querySelector('#deleteMessage');
+    let known = null;
+    let current = null;
+
+    function formatDate(value) {
+      const date = new Date(value);
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) + ' à ' +
+        date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function byline(creation) {
+      return `${creation.author ? `par ${creation.author} · ` : ''}${formatDate(creation.created_at)}`;
+    }
+
+    function render(creations) {
+      count.textContent = creations.length ? `${creations.length} carte${creations.length > 1 ? 's' : ''} publiée${creations.length > 1 ? 's' : ''}` : '';
+      empty.hidden = creations.length > 0;
+      const fresh = known ? new Set(creations.map(c => c.id).filter(id => !known.has(id))) : new Set();
+      known = new Set(creations.map(c => c.id));
+      grid.replaceChildren(...creations.map(creation => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = `creation ia-card${fresh.has(creation.id) ? ' is-new' : ''}`;
+        const frame = document.createElement('div');
+        frame.className = 'frame';
+        const image = document.createElement('img');
+        image.src = creation.image;
+        image.alt = creation.title;
+        image.loading = 'lazy';
+        frame.append(image);
+        const caption = document.createElement('div');
+        caption.className = 'caption';
+        const title = document.createElement('h2');
+        title.className = 'ia-heading';
+        title.textContent = creation.title;
+        const meta = document.createElement('span');
+        meta.className = 'meta';
+        meta.textContent = byline(creation);
+        caption.append(title, meta);
+        item.append(frame, caption);
+        item.addEventListener('click', () => open(creation));
+        return item;
+      }));
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch('/api/creations', { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        render(data.creations);
+      } catch {
+        // Keep the current grid if the server is briefly unreachable.
+      }
+    }
+
+    function open(creation) {
+      current = creation;
+      document.querySelector('#lightboxImage').src = creation.image;
+      document.querySelector('#lightboxImage').alt = creation.title;
+      document.querySelector('#lightboxTitle').textContent = creation.title;
+      document.querySelector('#lightboxMeta').textContent = byline(creation);
+      const link = document.querySelector('#downloadLink');
+      link.href = creation.image;
+      link.download = `iagora-${creation.id}.png`;
+      deleteForm.hidden = true;
+      lightbox.hidden = false;
+    }
+
+    function close() {
+      lightbox.hidden = true;
+      current = null;
+    }
+
+    // The password is checked by the server; the page never knows it.
+    deleteButton.addEventListener('click', () => {
+      deleteForm.hidden = false;
+      deleteMessage.textContent = '';
+      deletePassword.value = '';
+      deletePassword.focus();
+    });
+    document.querySelector('#cancelDelete').addEventListener('click', () => { deleteForm.hidden = true; });
+    deleteForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!current) return;
+      deleteMessage.textContent = 'Vérification…';
+      try {
+        const response = await fetch(`/api/creations/${current.id}`, {
+          method: 'DELETE', headers: { 'X-Gallery-Password': deletePassword.value }
+        });
+        if (!response.ok) throw new Error((await response.json()).detail || 'Suppression impossible.');
+        close();
+        refresh();
+      } catch (error) {
+        deleteMessage.textContent = error.message;
+        deletePassword.select();
+      }
+    });
+    document.querySelector('#closeLightbox').addEventListener('click', close);
+    lightbox.addEventListener('click', event => { if (event.target === lightbox) close(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>

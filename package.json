@@ -1,0 +1,22 @@
+{
+  "name": "pixelgpt-iagora",
+  "version": "1.0.0",
+  "description": "Atelier pixel art IAgora : PixelGPT 24x24 dans le navigateur",
+  "dependencies": {
+    "@vercel/blob": "^2.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "@huggingface/transformers": "4.3.0",
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0"
+  },
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "bundle": "node tools/build-engine.mjs",
+    "atelier": "node tools/serve.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FFFFFF">
+  <title>Atelier pixel art · IAgora</title>
+  <link rel="stylesheet" href="/static/iagora.css">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <a class="ia-logo" href="/" aria-label="IAgora, atelier pixel art"><b>IA</b>GORA</a>
+      <span class="ia-eyebrow">Atelier pixel art</span>
+    </div>
+    <div class="card-controls" role="group" aria-label="Format de la carte postale">
+      <span class="card-label">Carte 15 × 10 cm</span>
+      <button id="landscapeButton" class="ia-tag" type="button" aria-pressed="true">Paysage</button>
+      <button id="portraitButton" class="ia-tag" type="button" aria-pressed="false">Portrait</button>
+      <label class="card-background" title="Couleur de fond de la carte">
+        <span>Fond</span>
+        <input id="cardBackground" type="color" value="#ffffff">
+      </label>
+    </div>
+    <div class="header-actions">
+      <button id="undoButton" class="ia-btn ia-btn--ghost ia-btn--sm" type="button" disabled>Annuler</button>
+      <button id="redoButton" class="ia-btn ia-btn--ghost ia-btn--sm" type="button" disabled>Rétablir</button>
+      <button id="clearButton" class="ia-btn ia-btn--ghost ia-btn--sm" type="button">Effacer</button>
+      <button id="exportButton" class="ia-btn ia-btn--ghost ia-btn--sm" type="button">Exporter PNG</button>
+      <button id="printButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Imprimer</button>
+      <button id="publishButton" class="ia-btn ia-btn--accent ia-btn--sm" type="button">Publier</button>
+      <a class="ia-btn ia-btn--ghost ia-btn--sm gallery-link" href="/galerie" target="_blank" rel="noopener">Galerie collective ➭</a>
+      <button id="aboutButton" class="ia-btn ia-btn--ghost ia-btn--sm" type="button">À propos</button>
+    </div>
+  </header>
+
+  <main id="stage" aria-label="Composition de la carte postale">
+    <canvas id="canvas"></canvas>
+    <div id="emptyState">
+      <span class="ia-eyebrow">L'IA par tous et pour tous /</span>
+      <strong class="ia-display">Composez votre carte postale.</strong>
+      <span class="lead">Décrivez un seul objet en 2 à 4 mots (une couleur ou une matière, puis l'objet),
+        puis assemblez vignettes et textes sur la carte. Essayez par exemple :</span>
+      <div id="examples" class="examples"></div>
+      <div class="starters">
+        <button class="ia-btn ia-btn--primary" type="button" data-library-tab="compositions">Partir d'une composition</button>
+        <button class="ia-btn ia-btn--outline" type="button" data-library-tab="0">Parcourir 1 520 vignettes</button>
+        <button class="ia-btn ia-btn--outline" type="button" data-add-text>Ajouter du texte</button>
+      </div>
+    </div>
+
+    <aside id="inspector" class="panel ia-card" hidden>
+      <div class="panel-heading">
+        <span id="selectedName" class="ia-heading">Vignette</span>
+        <button class="ia-icon-btn" type="button" data-deselect aria-label="Désélectionner">×</button>
+      </div>
+      <div class="panel-section">
+        <span class="section-label">Couleurs</span>
+        <div id="palette" class="palette" aria-label="Palette de la vignette"></div>
+        <div class="button-grid two">
+          <button id="randomPaletteButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Palette au hasard</button>
+          <button id="regenerateButton" class="ia-btn ia-btn--primary ia-btn--sm" type="button">Régénérer</button>
+        </div>
+      </div>
+      <div class="panel-section">
+        <span class="section-label">Transformer</span>
+        <div class="button-grid three">
+          <button id="flipHorizontalButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Miroir H</button>
+          <button id="flipVerticalButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Miroir V</button>
+          <button id="rotateButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Pivoter</button>
+        </div>
+        <div class="button-grid two">
+          <button id="groupButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Grouper</button>
+          <button id="ungroupButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Dégrouper</button>
+        </div>
+      </div>
+      <div class="panel-section layer-tools"></div>
+    </aside>
+
+    <aside id="textInspector" class="panel ia-card" hidden>
+      <div class="panel-heading">
+        <span class="ia-heading">Texte</span>
+        <button class="ia-icon-btn" type="button" data-deselect aria-label="Désélectionner">×</button>
+      </div>
+      <div class="panel-section">
+        <label class="ia-field">Votre texte
+          <textarea id="textContent" class="ia-textarea" rows="2" maxlength="120"></textarea>
+        </label>
+        <div class="field-row">
+          <label class="ia-field grow">Police
+            <select id="textFont" class="ia-select"></select>
+          </label>
+          <label class="ia-field color-field">Couleur
+            <input id="textColor" type="color" value="#3045D1">
+          </label>
+        </div>
+        <label class="ia-field">Taille
+          <input id="textSize" type="range" min="10" max="320" step="1">
+        </label>
+        <div class="toggle-row" role="group" aria-label="Mise en forme">
+          <button id="textBold" class="ia-tag format-toggle" type="button" aria-pressed="false" title="Gras"><b>G</b></button>
+          <button id="textItalic" class="ia-tag format-toggle" type="button" aria-pressed="false" title="Italique"><i>I</i></button>
+          <button id="textUnderline" class="ia-tag format-toggle" type="button" aria-pressed="false" title="Souligné"><u>S</u></button>
+        </div>
+      </div>
+      <div class="panel-section">
+        <span class="section-label">WordArt</span>
+        <div id="textStyles" class="style-grid" role="group" aria-label="Effet WordArt"></div>
+        <div id="textShapes" class="toggle-row" role="group" aria-label="Forme du texte"></div>
+      </div>
+      <div class="panel-section layer-tools"></div>
+    </aside>
+
+    <template id="layerToolsTemplate">
+      <span class="section-label">Calque</span>
+      <div class="button-grid size-row">
+        <button class="ia-btn ia-btn--outline ia-btn--sm" type="button" data-action="smaller" aria-label="Réduire">−</button>
+        <button class="ia-btn ia-btn--outline ia-btn--sm" type="button" data-action="larger" aria-label="Agrandir">+</button>
+        <button class="ia-btn ia-btn--outline ia-btn--sm" type="button" data-action="duplicate">Dupliquer</button>
+      </div>
+      <div class="button-grid three">
+        <button class="ia-btn ia-btn--outline ia-btn--sm" type="button" data-action="back">Arrière</button>
+        <button class="ia-btn ia-btn--outline ia-btn--sm" type="button" data-action="front">Avant</button>
+        <button class="ia-btn ia-btn--ghost ia-btn--sm danger" type="button" data-action="delete">Supprimer</button>
+      </div>
+    </template>
+
+    <aside id="layersPanel" class="panel ia-card layers-panel" hidden>
+      <div class="panel-heading"><span class="ia-heading">Calques</span><small>dessus d'abord</small></div>
+      <div id="layers"></div>
+    </aside>
+
+    <aside id="historyPanel" class="panel ia-card history-panel" hidden>
+      <div class="panel-heading"><span class="ia-heading">Historique</span><small>Cmd/Ctrl + Z</small></div>
+      <div id="history"></div>
+    </aside>
+  </main>
+
+  <div id="library" class="modal" role="dialog" aria-modal="true" aria-labelledby="libraryTitle" hidden>
+    <div class="modal-window ia-card library-window">
+      <div class="panel-heading">
+        <span id="libraryTitle" class="ia-heading">Bibliothèque.</span>
+        <button id="closeLibrary" class="ia-icon-btn" type="button" aria-label="Fermer la bibliothèque">×</button>
+      </div>
+      <div class="library-search">
+        <label class="sr-only" for="librarySearch">Rechercher une vignette</label>
+        <input id="librarySearch" class="ia-input" type="search" autocomplete="off"
+          placeholder="Rechercher une vignette : chat, épée, lune, fusée…">
+      </div>
+      <nav id="libraryTabs" class="library-tabs" aria-label="Catégories"></nav>
+      <p id="libraryHint" class="library-hint"></p>
+      <div id="libraryGrid" class="library-grid"></div>
+      <p class="library-credit">Vignettes issues du jeu de données
+        <a href="https://huggingface.co/datasets/unstonio/pixelgpt-24x24-20k" target="_blank" rel="noopener">PixelGPT 24×24 (20K)</a>
+        par unstonio, licence <a href="https://creativecommons.org/licenses/by/4.0/deed.fr" target="_blank" rel="noopener">CC BY 4.0</a>.
+        Légendes traduites automatiquement.</p>
+    </div>
+  </div>
+
+  <div id="publishDialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="publishTitle" hidden>
+    <form id="publishForm" class="modal-window ia-card publish-window">
+      <div class="panel-heading">
+        <span id="publishTitle" class="ia-heading">Publier dans la galerie collective.</span>
+        <button class="ia-icon-btn" type="button" data-close-publish aria-label="Fermer">×</button>
+      </div>
+      <div class="publish-body">
+        <img id="publishPreview" class="publish-preview" alt="Aperçu de votre carte">
+        <div class="publish-fields">
+          <label class="ia-field">Titre de la carte
+            <input id="publishTitleInput" class="ia-input" maxlength="80" placeholder="ex. Mon bord de mer">
+          </label>
+          <label class="ia-field">Prénom ou pseudo
+            <input id="publishAuthorInput" class="ia-input" maxlength="40" placeholder="facultatif">
+          </label>
+          <p class="publish-note">Votre carte sera visible par toutes et tous dans la galerie de l'atelier.
+            Pas de nom de famille ni d'information personnelle.</p>
+          <p id="publishStatus" class="publish-status" role="status" aria-live="polite"></p>
+          <div class="publish-actions">
+            <button class="ia-btn ia-btn--ghost" type="button" data-close-publish>Annuler</button>
+            <button id="publishSubmit" class="ia-btn ia-btn--accent" type="submit">Publier ma carte</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+
+  <div id="aboutDialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" hidden>
+    <div class="modal-window ia-card about-window">
+      <div class="panel-heading">
+        <span id="aboutTitle" class="ia-heading">À propos de l'atelier.</span>
+        <button class="ia-icon-btn" type="button" data-close-about aria-label="Fermer">×</button>
+      </div>
+      <div class="about-body">
+        <p class="about-lead">Cet atelier s'inspire de <strong>PixelGPT 24×24</strong>, créé par <strong>unstonio</strong>,
+          et en réutilise le modèle de génération, converti pour fonctionner directement dans le navigateur.
+          Tout le mérite de ce modèle lui revient : <a href="https://github.com/unstonio/pixelgpt-24x24" target="_blank" rel="noopener">github.com/unstonio/pixelgpt-24x24</a>
+          · <a href="https://unston.io/pixelgpt" target="_blank" rel="noopener">démo originale</a>.</p>
+        <p>Le modèle tourne sur cet ordinateur : vos descriptions ne sont envoyées à aucun service d'IA en ligne.
+          Seules les cartes que vous choisissez de publier rejoignent la galerie collective.</p>
+        <span class="section-label">Crédits</span>
+        <ul class="credits">
+          <li>★ <strong>Modèle PixelGPT 24×24</strong> : unstonio. Aucune licence n'a été publiée pour ce modèle ;
+            il sera retiré de ce site sur simple demande de son auteur.</li>
+          <li>★ <strong>Vignettes de la bibliothèque</strong> : jeu de données
+            <a href="https://huggingface.co/datasets/unstonio/pixelgpt-24x24-20k" target="_blank" rel="noopener">PixelGPT 24×24 (20K)</a>
+            par unstonio, licence CC BY 4.0. Légendes traduites automatiquement.</li>
+          <li>★ <strong>Traduction français → anglais</strong> : opus-mt-fr-en, Helsinki-NLP (université d'Helsinki), licence CC BY 4.0,
+            version ONNX de Xenova.</li>
+          <li>★ <strong>Compréhension du texte</strong> : all-MiniLM-L6-v2, sentence-transformers, licence Apache 2.0.</li>
+          <li>★ <strong>Moteur dans le navigateur</strong> : ONNX Runtime Web (Microsoft, MIT) et Transformers.js (Hugging Face, Apache 2.0).</li>
+          <li>★ <strong>Polices</strong> : Anton, Heebo, Press Start 2P, Bangers, Lobster, Pacifico (SIL Open Font License).</li>
+        </ul>
+        <p class="about-foot">Atelier pixel art IAgora · code source :
+          <a href="https://github.com/mamatdunet/pixelgptiagora" target="_blank" rel="noopener">github.com/mamatdunet/pixelgptiagora</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="printSheet" aria-hidden="true"><img id="printImage" alt=""></div>
+
+  <div class="creation-bar">
+    <div id="engineStatus" class="engine-status" role="status" aria-live="polite">
+      <div id="engineBar" class="engine-bar"></div>
+      <span id="engineLabel">Préparation du modèle d'IA…</span>
+    </div>
+    <div class="creation-tools">
+      <button id="libraryButton" class="ia-btn ia-btn--outline" type="button">Bibliothèque</button>
+      <button id="addTextButton" class="ia-btn ia-btn--outline" type="button">+ Texte</button>
+    </div>
+    <form id="promptForm" autocomplete="off">
+      <label class="sr-only" for="prompt">Décrire une vignette</label>
+      <input id="prompt" name="prompt" maxlength="160" placeholder="ex. grenouille verte" aria-describedby="status" required autofocus>
+      <label class="temperature-control" title="Température : plus bas = plus sage, plus haut = plus surprenant">
+        <span>Audace</span>
+        <input id="temperature" type="range" min="0.1" max="2" step="0.1" value="1">
+        <output id="temperatureValue" for="temperature">1.0</output>
+      </label>
+      <button id="generateButton" class="ia-btn ia-btn--primary" type="submit" aria-label="Générer la vignette">
+        <span>Générer</span><i aria-hidden="true">↵</i>
+      </button>
+    </form>
+    <div id="status" role="status" aria-live="polite">Un objet, 2 à 4 mots : « chouette des neiges », « épée en fer »…</div>
+  </div>
+
+  <script src="/static/wordart.js" defer></script>
+  <script src="/static/engine.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
