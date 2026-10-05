@@ -123,6 +123,12 @@ input[type="range"] { width: 100%; accent-color: var(--blue-600); }
 .library-item canvas { width: 72px; height: 72px; image-rendering: pixelated; border-radius: var(--radius-sm); }
 .library-grid.compositions .library-item { font: 400 15px/1.2 var(--font-display); text-transform: uppercase; letter-spacing: .04em; padding: 12px; color: var(--blue-600); }
 .library-grid.compositions .library-item canvas { width: auto; height: 170px; max-width: 100%; border-radius: var(--radius-md); }
+.composition-filters { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.composition-filters .ia-tag { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.composition-item { grid-column: span 2; font: 400 15px/1.2 var(--font-display); text-transform: uppercase; letter-spacing: .04em; color: var(--blue-600); }
+.library-grid.compositions .composition-item { grid-column: auto; }
+.composition-item canvas { width: auto !important; height: 170px !important; max-width: 100%; border-radius: var(--radius-md); image-rendering: pixelated; }
+.composition-item small { font: 500 11px/1.2 var(--font-body); text-transform: none; letter-spacing: 0; color: var(--ink-500); }
 .library-item span { overflow-wrap: anywhere; }
 .library-credit { margin: 0; padding: 10px 16px; border-top: 2px solid var(--ink-100); color: var(--ink-500); font-size: 12px; }
 

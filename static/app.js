@@ -925,6 +925,11 @@ document.querySelector('#clearButton').addEventListener('click', () => {
 let fontsVersion = 0;
 let textEditBefore = null;
 
+function fitTextWidth(item, maxWidth) {
+  const natural = itemBox(item);
+  if (natural.w > maxWidth) item.fontSize = Math.max(8, Math.floor(item.fontSize * maxWidth / natural.w));
+}
+
 function addText() {
   const before = captureState();
   const item = {
@@ -932,8 +937,7 @@ function addText() {
     bold: false, italic: false, underline: false, color: '#3045D1', style: 'uni', shape: 'droit', groupId: null, x: 0, y: 0
   };
   // Start at a size that fits comfortably inside the card, whatever its orientation.
-  const natural = itemBox(item);
-  if (natural.w > card.w * 0.8) item.fontSize = Math.max(8, Math.floor(item.fontSize * card.w * 0.8 / natural.w));
+  fitTextWidth(item, card.w * 0.8);
   const box = itemBox(item);
   item.x = card.x + (card.w - box.w) / 2;
   item.y = card.y + (card.h - box.h) / 2;
@@ -1226,10 +1230,23 @@ function loadComposition(composition) {
     const pixelSize = Math.max(2, Math.round(item.size * card.h / 24));
     const half = pixelSize * 12;
     sprites.push({
-      id: nextId++, name: item.name, seed: item.seed, tokens: tokensFromString(item.tokens),
+      id: nextId++, name: item.name, prompt: item.prompt, seed: item.seed, tokens: tokensFromString(item.tokens),
       palette: [...composition.palette], transparentIndex: 0, pixelSize,
       x: card.x + item.cx * card.w - half, y: card.y + item.cy * card.h - half, groupId: null, bitmapDirty: true
     });
+  });
+  // Postcard texts go on top, shrunk if a font is wider than expected so they stay inside the card.
+  (composition.texts ?? []).forEach(entry => {
+    const text = {
+      id: nextId++, type: 'text', text: entry.text, font: entry.font, fontSize: Math.round(entry.size * card.h),
+      bold: Boolean(entry.bold), italic: false, underline: false, color: entry.color, style: entry.style,
+      shape: entry.shape, groupId: null, x: 0, y: 0
+    };
+    fitTextWidth(text, card.w * 0.92);
+    const box = itemBox(text);
+    text.x = card.x + entry.cx * card.w - box.w / 2;
+    text.y = card.y + entry.cy * card.h - box.h / 2;
+    sprites.push(text);
   });
   selectedIds.clear();
   primaryId = null;
@@ -1271,7 +1288,66 @@ function compositionPreview(composition) {
       Math.round(item.cx * preview.width - half), Math.round(item.cy * preview.height - half), pixel
     );
   });
+  (composition.texts ?? []).forEach(entry => {
+    const options = { ...entry, italic: false, underline: false };
+    let rendering = WordArt.render({ ...options, fontSize: entry.size * preview.height });
+    if (rendering.width > preview.width * 0.92) {
+      rendering = WordArt.render({ ...options, fontSize: entry.size * preview.height * preview.width * 0.92 / rendering.width });
+    }
+    previewContext.drawImage(rendering.canvas, entry.cx * preview.width - rendering.width / 2, entry.cy * preview.height - rendering.height / 2);
+  });
   return preview;
+}
+
+// Previews are drawn only when they scroll into view: a hundred cards with WordArt would stall the dialog.
+const previewObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    previewObserver.unobserve(entry.target);
+    entry.target.querySelector('canvas').replaceWith(compositionPreview(entry.target.composition));
+  });
+}, { root: libraryGrid, rootMargin: '200px' });
+
+function compositionTile(composition) {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'library-item composition-item';
+  item.composition = composition;
+  const placeholder = document.createElement('canvas');
+  const [widthMm, heightMm] = CARD_MM[composition.orientation];
+  placeholder.width = widthMm;
+  placeholder.height = heightMm;
+  placeholder.style.background = composition.background;
+  const label = document.createElement('span');
+  label.textContent = composition.title;
+  const meta = document.createElement('small');
+  meta.textContent = `${composition.category ?? 'Exemple'} · ${composition.orientation === 'landscape' ? 'paysage' : 'portrait'}`;
+  item.append(placeholder, label, meta);
+  item.addEventListener('click', () => loadComposition(composition));
+  previewObserver.observe(item);
+  return item;
+}
+
+let compositionCategory = null;
+
+function renderCompositions() {
+  const categories = [...new Set(compositions.map(composition => composition.category).filter(Boolean))];
+  const filters = document.createElement('div');
+  filters.className = 'composition-filters';
+  [null, ...categories].forEach(category => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ia-tag';
+    button.textContent = category ?? `Toutes (${compositions.length})`;
+    button.setAttribute('aria-pressed', String(category === compositionCategory));
+    button.addEventListener('click', () => {
+      compositionCategory = category;
+      showLibraryTab('compositions');
+    });
+    filters.append(button);
+  });
+  const shown = compositions.filter(composition => !compositionCategory || composition.category === compositionCategory);
+  libraryGrid.replaceChildren(filters, ...shown.map(compositionTile));
 }
 
 async function loadLibraryData() {
@@ -1288,17 +1364,8 @@ function showLibraryTab(tab) {
   libraryGrid.scrollTop = 0;
   libraryGrid.classList.toggle('compositions', tab === 'compositions');
   if (tab === 'compositions') {
-    libraryHint.textContent = 'Des cartes déjà composées avec le modèle. Chargez-en une puis modifiez-la : tout reste déplaçable et régénérable.';
-    compositions.forEach(composition => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'library-item';
-      const label = document.createElement('span');
-      label.textContent = `${composition.title} · ${composition.orientation === 'landscape' ? 'paysage' : 'portrait'}`;
-      item.append(compositionPreview(composition), label);
-      item.addEventListener('click', () => loadComposition(composition));
-      libraryGrid.append(item);
-    });
+    libraryHint.textContent = 'Des cartes postales déjà composées avec le modèle, pour trouver des idées. Chargez-en une puis modifiez-la : vignettes et textes restent déplaçables, modifiables et régénérables.';
+    renderCompositions();
     return;
   }
   libraryHint.textContent = 'Exemples du jeu de données qui a servi à entraîner le modèle. Cliquez sur une vignette pour la poser sur la carte ; « Régénérer » en fera une variante avec le modèle.';
@@ -1349,10 +1416,17 @@ function searchLibrary(query) {
   });
   matches.sort((a, b) => b.score - a.score);
   const shown = matches.slice(0, 240);
-  libraryGrid.replaceChildren(...shown.map(match => libraryTile(match.entry)));
+  const cards = compositions.filter(composition => {
+    const haystack = normalizeSearch(`${composition.title} ${composition.category ?? ''} ${composition.sprites.map(item => item.name).join(' ')} ${(composition.texts ?? []).map(item => item.text).join(' ')}`);
+    return words.every(word => haystack.includes(word));
+  });
+  libraryGrid.replaceChildren(...cards.map(compositionTile), ...shown.map(match => libraryTile(match.entry)));
   const label = query.trim();
-  if (matches.length) {
-    libraryHint.textContent = `${matches.length} vignette${matches.length > 1 ? 's' : ''} pour « ${label} »${matches.length > shown.length ? ` (${shown.length} premières affichées)` : ''}. Cliquez pour la poser sur la carte.`;
+  if (matches.length || cards.length) {
+    const parts = [];
+    if (cards.length) parts.push(`${cards.length} carte${cards.length > 1 ? 's' : ''}`);
+    if (matches.length) parts.push(`${matches.length} vignette${matches.length > 1 ? 's' : ''}${matches.length > shown.length ? ` (${shown.length} premières affichées)` : ''}`);
+    libraryHint.textContent = `${parts.join(' et ')} pour « ${label} ». Cliquez pour la poser sur la carte.`;
     return;
   }
   libraryHint.textContent = `Aucune vignette pour « ${label} » dans la bibliothèque. Le modèle peut l'inventer :`;
