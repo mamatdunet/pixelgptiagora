@@ -32,6 +32,7 @@ def ellipse(g, cx, cy, rx, ry, c):
 
 
 def rect(g, x0, y0, x1, y1, c):
+    x0, y0, x1, y1 = (int(round(v)) for v in (x0, y0, x1, y1))
     for y in range(y0, y1 + 1):
         for x in range(x0, x1 + 1):
             if inside(x, y):
@@ -116,12 +117,21 @@ def sacre_coeur():
 
 
 def mont_saint_michel():
-    return rows([
-        "...........2", "...........1", "..........11", "..........12", ".........112", ".........122",
-        "........1122", "........1223", ".......11222", ".......12322", "......112222", ".....1123232",
-        ".....1222222", "....11322322", "...112222222", "...123232323", "..1122222222", "..1333333333",
-        ".13333333333", "133333333333", "4.44.44.44.4", ".44.44.44.44", "............", "............",
-    ], mirror=True)
+    """Rock island: abbey church and spire with Saint Michael on top, village houses, ramparts, the bay."""
+    g = rows([
+        "............2...........", "............1...........", "...........131..........", "...........131..........",
+        "..........13331.........", "..........13331.........", ".......1111133311111....", ".......1232322232321....",
+        ".......1222222222221....", "......112323232323211...", "......122222222222221...", ".....11222322232223211..",
+        ".....12222222222222221..", "....113331133311333111..", "....122321223212232211..", "...11333113331133311111.",
+        "...12232122321223212221.", "..1133333333333333333311", ".1212121212121212121212.", ".1222222222222222222221.",
+        ".1221222122212221222121.", "11111111111111111111111.", "........................", "........................",
+    ])
+    for x in range(N):
+        if x % 3 != 1:
+            g[22][x] = 4
+        if x % 3 != 2:
+            g[23][x] = 4
+    return g
 
 
 # ---------------------------------------------------------------- shapes + automatic outline
@@ -309,6 +319,444 @@ def velo():
     return g
 
 
+# ---------------------------------------------------------------- second series (cards feedback)
+
+def chaise_bleue():
+    """The blue chair of the Promenade des Anglais in Nice."""
+    g = blank()
+    for y in range(3, 12):
+        rect(g, 6, y, 17, y, 2 if y % 2 else 3)
+    rect(g, 6, 3, 6, 21, 4)
+    rect(g, 17, 3, 17, 21, 4)
+    rect(g, 3, 12, 20, 12, 2)
+    rect(g, 3, 13, 20, 14, 3)
+    rect(g, 4, 15, 5, 21, 2)
+    rect(g, 18, 15, 19, 21, 2)
+    return outline(g)
+
+
+def palmier():
+    g = blank()
+    for i in range(14):
+        t = i / 13
+        x, y = 11 + 3 * t * t, 22 - 13 * t
+        ellipse(g, x, y, 1.6, .9, 3 if i % 2 else 4)
+    tops = [(2, 11), (4, 5), (11, 2), (19, 3), (23, 9), (20, 13), (7, 12)]
+    for tx, ty in tops:
+        line(g, 14, 9, (14 + tx) / 2, min(ty, 9) - 2.5, 2, width=2)
+        line(g, (14 + tx) / 2, min(ty, 9) - 2.5, tx, ty, 2, width=2)
+    ellipse(g, 13.5, 10, 1.4, 1.2, 4)
+    ellipse(g, 15.5, 10.5, 1.2, 1.1, 4)
+    return outline(g)
+
+
+def tapis_rouge():
+    """Red carpet up the white steps of the Palais des Festivals, gold posts and velvet ropes in front."""
+    g = blank()
+    rect(g, 8, 1, 15, 4, 1)
+    for y in range(5, 22):
+        half = 4 + (y - 5) * .5
+        rect(g, 12 - half, y, 11 + half, y, 3)
+        carpet = 1.6 + (y - 5) * .22
+        rect(g, 12 - carpet, y, 11 + carpet, y, 2)
+    g = outline(g)
+    for y in range(7, 22, 3):
+        for x in range(N):
+            if g[y][x] == 3:
+                g[y][x] = 1
+            elif g[y][x] == 2:
+                g[y][x] = 4 if False else 2
+    for x0, x1 in ((1, 6), (17, 22)):
+        for x in (x0, x1):
+            rect(g, x, 15, x, 23, 4)
+            g[14][x] = 4
+        mid = (x0 + x1) / 2
+        line(g, x0, 15.5, mid, 18, 2)
+        line(g, mid, 18, x1, 15.5, 2)
+    return g
+
+
+def palme_d_or():
+    g = blank()
+    rect(g, 6, 20, 15, 22, 4)
+    points = [(10, 20), (11, 15), (13, 10), (16, 5), (18, 2)]
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        line(g, ax, ay, bx, by, 2, width=1)
+    for i, (x, y) in enumerate(points[:-1]):
+        for k in (0, 1):
+            px, py = x + (bx - x) * k * .5 if False else x, y
+            line(g, x + .5, y - 1.5 * k, x - 4 + i * .6, y - 3 - 1.5 * k, 2 if k else 3)
+            line(g, x + .5, y - 1.5 * k, x + 4 - i * .2, y - 1 - 1.5 * k, 3 if k else 2)
+    return outline(g)
+
+
+def carcassonne():
+    """The Cité: walls with crenels and round towers under pointed slate roofs."""
+    g = blank()
+    rect(g, 1, 14, 22, 21, 2)
+    for x in range(1, 23, 2):
+        g[13][x] = 2
+    for cx, top, width in ((3.5, 8, 2), (9, 10, 1.5), (15, 10, 1.5), (20.5, 8, 2), (12, 4, 2)):
+        rect(g, int(cx - width), top + 3, int(cx + width), 21, 2)
+        polygon(g, [(cx - width - 1.2, top + 3.5), (cx + .5, top - 2.5), (cx + width + 2.2, top + 3.5)], 3)
+        g[top + 5][int(cx)] = 1
+    g[0][12] = 4
+    g[1][12], g[1][13] = 4, 4
+    polygon(g, [(10, 21.5), (10, 18), (12, 16), (14, 18), (14, 21.5)], 1)
+    for y in range(16, 21, 2):
+        for x in (3, 7, 17, 20):
+            g[y][x] = 3
+    return outline(g)
+
+
+def chateau_de_versailles():
+    g = blank()
+    rect(g, 0, 10, 23, 19, 2)
+    rect(g, 1, 7, 22, 9, 3)
+    rect(g, 7, 4, 16, 9, 3)
+    polygon(g, [(8, 10), (12, 6.5), (16, 10)], 2)
+    for x in range(1, 23):
+        g[7][x] = 4
+    for x in range(7, 17):
+        g[4][x] = 4
+    for x in range(1, 23, 2):
+        for y in (11, 12, 15, 16):
+            if not 10 <= x <= 13 or y > 13:
+                g[y][x] = 3
+    rect(g, 11, 15, 12, 19, 1)
+    for x in range(0, 24, 2):
+        rect(g, x, 20, x, 22, 4)
+    rect(g, 0, 20, 23, 20, 4)
+    g = outline(g)
+    return g
+
+
+def notre_dame():
+    """West facade: two square towers, rose window, gallery of kings, three portals, spire behind."""
+    g = blank()
+    line(g, 12, 0, 12, 7, 3)
+    rect(g, 3, 3, 8, 21, 2)
+    rect(g, 15, 3, 20, 21, 2)
+    rect(g, 9, 7, 14, 21, 2)
+    for tower in (3, 15):
+        for x in (tower + 1, tower + 4):
+            rect(g, x, 4, x, 8, 3)
+        rect(g, tower, 10, tower + 5, 10, 3)
+    ellipse(g, 11.5, 11.5, 2.6, 2.6, 3)
+    ellipse(g, 11.5, 11.5, 1.6, 1.6, 4)
+    for x in range(3, 21, 2):
+        g[14][x] = 3
+    for cx in (5.5, 11.5, 17.5):
+        polygon(g, [(cx - 2, 21.5), (cx - 2, 18), (cx, 16), (cx + 2, 18), (cx + 2, 21.5)], 3)
+    return outline(g)
+
+
+def capitole_toulouse():
+    """Pink brick facade with white stone columns (place du Capitole)."""
+    g = blank()
+    rect(g, 0, 9, 23, 20, 2)
+    rect(g, 0, 7, 23, 8, 3)
+    rect(g, 1, 5, 22, 6, 4)
+    polygon(g, [(7, 7.5), (12, 3), (17, 7.5)], 3)
+    for x in range(2, 23, 3):
+        rect(g, x, 9, x, 19, 3)
+    for x in range(3, 22, 3):
+        rect(g, x, 11, x + 1, 12, 1)
+        rect(g, x, 15, x + 1, 16, 1)
+    rect(g, 0, 20, 23, 21, 3)
+    return outline(g)
+
+
+def avion_de_ligne():
+    g = blank()
+    ellipse(g, 12, 12, 10.8, 2.4, 2)
+    polygon(g, [(1.5, 12), (2, 4), (5.5, 10.5)], 3)
+    polygon(g, [(10, 13), (14, 13), (8, 20.5), (5.5, 20.5)], 2)
+    ellipse(g, 9.5, 16, 1.6, 1, 4)
+    for x in range(6, 20, 2):
+        g[11][x] = 4
+    g[11][21], g[11][22] = 3, 3
+    rect(g, 3, 13, 20, 13, 3)
+    return outline(g)
+
+
+def violettes():
+    g = blank()
+    for x0, x1 in ((12, 6), (12, 12), (12, 18), (12, 9), (12, 15)):
+        line(g, x0, 22, x1, 10, 4)
+    ellipse(g, 7, 19, 3, 1.5, 4)
+    ellipse(g, 17, 19, 3, 1.5, 4)
+    for cx, cy in ((6, 8), (12, 6), (18, 8), (9, 11), (15, 11)):
+        for dx, dy in ((-1.5, 0), (1.5, 0), (0, -1.5), (-1, 1.2), (1, 1.2)):
+            ellipse(g, cx + dx, cy + dy, 1.3, 1.3, 2)
+        g[int(cy)][int(cx)] = 3
+    return outline(g)
+
+
+def lac_d_annecy():
+    """Mountains reflected in a blue lake."""
+    g = blank()
+    polygon(g, [(0, 15), (6, 5), (10, 10), (15, 3), (24, 15)], 2)
+    polygon(g, [(4.2, 8), (6, 5), (7.8, 8)], 3)
+    polygon(g, [(12.8, 6.5), (15, 3), (17.4, 6.5)], 3)
+    g = outline(g)
+    rect(g, 0, 15, 23, 22, 4)
+    for x in range(2, 22, 4):
+        g[18][x], g[18][x + 1] = 3, 3
+    for x in range(4, 20, 5):
+        g[20][x] = 3
+    return g
+
+
+def chambord():
+    """Renaissance château: corner towers, central keep and its forest of chimneys and lanterns."""
+    g = blank()
+    rect(g, 0, 13, 23, 21, 2)
+    rect(g, 6, 9, 17, 21, 2)
+    for cx in (2, 21):
+        ellipse(g, cx, 11.5, 2.4, 2, 3)
+        rect(g, cx - 2, 11, cx + 2, 21, 2)
+    rect(g, 6, 6, 17, 9, 3)
+    rect(g, 1, 11, 22, 12, 3)
+    for x in (7, 9, 14, 16):
+        rect(g, x, 3, x, 6, 3)
+    rect(g, 11, 1, 12, 6, 2)
+    g[0][11], g[0][12] = 3, 3
+    for x in range(1, 23, 2):
+        for y in (15, 18):
+            g[y][x] = 4
+    return outline(g)
+
+
+def pont_d_avignon():
+    """Pont Saint-Bénézet: round arches on thick piers, cut off in the middle of the Rhône, chapel on top."""
+    g = rows([
+        "........................", ".......111..............", "......13331.............", "......13131.............",
+        "......13331.............", "2.2.2.2.2.2.2.2.2.2.2...", "222222222222222222222...", "333333333333333333333...",
+        "222222222222222222222...", "222222222222222222222...", "222222222222222222222...", "2222...22222...22222....",
+        "222.....222.....222.....", "222.....222.....222.....", "222.....222.....222.....", "222.....222.....222.....",
+        "222.....222.....222.....", "222.....222.....222.....", "2222...22222...22222....", "........................",
+        "........................", "........................", "........................", "........................",
+    ])
+    g = outline(g)
+    for y in range(19, 24):
+        for x in range(N):
+            if (x + y) % 4:
+                g[y][x] = 4
+    return g
+
+
+def huitre():
+    """Open oyster: rough teardrop shell, pearly inside, grey flesh with its dark frill."""
+    g = blank()
+    polygon(g, [(2, 9), (8, 4), (16, 3.5), (22, 7), (22.5, 13), (18, 19), (11, 21), (4, 17)], 2)
+    for x, y in ((3, 9), (21, 8), (22, 13), (5, 17), (12, 21), (18, 19), (9, 4), (16, 4)):
+        if inside(x, y):
+            g[y][x] = 0
+    polygon(g, [(5, 9.5), (9, 6), (16, 5.5), (20, 8.5), (20, 13), (16.5, 17.5), (11, 19), (6, 16)], 3)
+    ellipse(g, 12.5, 12, 6, 4, 4)
+    ellipse(g, 12.5, 12, 4.6, 2.8, 1)
+    ellipse(g, 12.5, 12, 3.8, 2.1, 4)
+    ellipse(g, 11.5, 11.5, 1.4, .8, 3)
+    return outline(g)
+
+
+def etretat():
+    """Chalk cliff of Étretat: the Porte d'Aval arch and the Aiguille needle, above the sea."""
+    g = rows([
+        "........................", "........................", "........................", "........................",
+        "1111111111..............", "22222222221111..........", "222222222222221111......", "22222222222222222211....",
+        "2222222222222222222221..", "3222222222222222222221..", "3222222223333332222221..", "322222221......3222221.1",
+        "32222222.......322221.11", "3222222........32221..12", "3222222.........3221..12", "322222..........3221..12",
+        "322222..........32221.12", "3222222.........32221.12", "32222222........32222.12", "........................",
+        "........................", "........................", "........................", "........................",
+    ])
+    g = outline(g)
+    for y in range(19, 24):
+        for x in range(N):
+            if y > 19 and (x + y) % 3 == 0:
+                continue
+            g[y][x] = 4
+    return g
+
+
+def remparts_saint_malo():
+    """Granite ramparts of the walled city, tall houses with slate roofs and the cathedral spire."""
+    g = blank()
+    line(g, 15, 0, 15, 5, 3)
+    for x0, x1, top in ((1, 6, 6), (7, 12, 5), (13, 18, 6), (19, 22, 7)):
+        rect(g, x0, top + 2, x1, 12, 2)
+        polygon(g, [(x0 - .5, top + 2.5), ((x0 + x1 + 1) / 2, top - 1.5), (x1 + 1.5, top + 2.5)], 3)
+        for x in range(x0 + 1, x1, 2):
+            for y in range(top + 4, 12, 3):
+                g[y][x] = 3
+    rect(g, 0, 13, 23, 19, 2)
+    for x in range(0, 24, 2):
+        g[12][x] = 2
+    for y in (15, 17):
+        for x in range(1 + y % 2 * 2, 23, 4):
+            g[y][x] = 3
+    g = outline(g)
+    for y in range(20, 24):
+        for x in range(N):
+            if (x + y) % 4:
+                g[y][x] = 4
+    return g
+
+
+def sardine():
+    g = blank()
+    ellipse(g, 11, 12, 9.5, 3.2, 3)
+    for y in range(N):
+        for x in range(N):
+            if g[y][x] == 3 and y < 12:
+                g[y][x] = 2
+    polygon(g, [(19, 12), (23.5, 8), (22, 12), (23.5, 16)], 2)
+    for x in range(8, 17, 3):
+        g[11][x] = 4
+    rect(g, 6, 10, 6, 13, 4)
+    g = outline(g)
+    g[11][4] = 1
+    return g
+
+
+def glaciere():
+    g = blank()
+    rect(g, 3, 11, 20, 21, 2)
+    rect(g, 2, 8, 21, 10, 3)
+    rect(g, 4, 14, 19, 14, 3)
+    line(g, 7, 8, 7, 5, 4)
+    line(g, 7, 5, 16, 5, 4)
+    line(g, 16, 5, 16, 8, 4)
+    rect(g, 11, 10, 12, 12, 4)
+    return outline(g)
+
+
+def tartine():
+    """Slice of bread with chocolate spread."""
+    g = blank()
+    ellipse(g, 12, 8, 8.5, 4.5, 4)
+    rect(g, 3.5, 8, 20, 21, 4)
+    ellipse(g, 12, 8, 7.2, 3.4, 3)
+    rect(g, 5, 8, 18, 20, 3)
+    ellipse(g, 12, 8.6, 6, 2.6, 2)
+    rect(g, 6, 9, 17, 16, 2)
+    for x in range(6, 18):
+        if x % 3 != 0:
+            g[17][x] = 2
+    return outline(g)
+
+
+def bol_breton():
+    g = blank()
+    ellipse(g, 12, 10, 9.5, 9, 2)
+    rect(g, 0, 0, 23, 9, 0)
+    ellipse(g, 12, 10, 9.5, 2.4, 3)
+    ellipse(g, 12, 10, 7.8, 1.5, 4)
+    for ex in (1.6, 22.4):
+        ellipse(g, ex, 13, 1.9, 1.6, 2)
+    for x in range(5, 19, 2):
+        g[15][x] = 3
+    rect(g, 6, 17, 17, 17, 3)
+    return outline(g)
+
+
+def guitare_electrique():
+    g = blank()
+    line(g, 11, 12, 20, 3, 4, width=2)
+    rect(g, 19, 1, 22, 3, 4)
+    ellipse(g, 8, 16, 5.6, 4.6, 2)
+    ellipse(g, 11.5, 12.5, 4, 3.4, 2)
+    ellipse(g, 9, 15, 2.5, 2, 3)
+    rect(g, 6, 17, 8, 17, 1)
+    for i in range(3):
+        g[1 + i][21] = 3
+    return outline(g)
+
+
+def batterie():
+    g = blank()
+    for cx, cy in ((4, 7), (20, 6)):
+        line(g, cx, cy + 1, cx, 21, 1)
+        ellipse(g, cx, cy, 3.8, 1.1, 4)
+    ellipse(g, 5.5, 15, 3, 1.9, 2)
+    ellipse(g, 5.5, 14.4, 3, 1.2, 3)
+    for cx in (9, 15):
+        ellipse(g, cx, 10.5, 3, 2.1, 2)
+        ellipse(g, cx, 9.8, 3, 1.3, 3)
+    ellipse(g, 12, 16.5, 5.8, 5.8, 2)
+    ellipse(g, 12, 16.5, 4.3, 4.3, 3)
+    ellipse(g, 12, 16.5, 1.6, 1.6, 2)
+    return outline(g)
+
+
+def micro():
+    g = blank()
+    rect(g, 12, 11, 12, 20, 4)
+    ellipse(g, 12, 21.5, 5, 1.6, 4)
+    ellipse(g, 12, 6, 3.8, 4.8, 2)
+    for y in range(3, 10, 2):
+        for x in range(10, 15):
+            if g[y][x] == 2:
+                g[y][x] = 3
+    rect(g, 9, 10, 15, 10, 1)
+    return outline(g)
+
+
+def cigogne():
+    """White stork: black flight feathers, long red beak and legs."""
+    g = blank()
+    line(g, 10, 13, 10, 22, 4)
+    line(g, 12, 13, 14, 17, 4)
+    line(g, 14, 17, 11, 18, 4)
+    ellipse(g, 11.5, 10, 6.5, 3.4, 2)
+    ellipse(g, 14.5, 10.5, 4.6, 2.4, 3)
+    polygon(g, [(17, 9), (22.5, 12), (17, 12)], 3)
+    line(g, 6.5, 9, 5.5, 4, 2, width=2)
+    ellipse(g, 5, 3.4, 1.9, 1.6, 2)
+    line(g, 3.5, 4, .5, 8, 4)
+    line(g, 3.5, 3.5, 1, 6.5, 4)
+    g = outline(g)
+    g[3][5] = 1
+    return g
+
+
+def maison_alsacienne():
+    """Half-timbered house with a steep tiled roof and flower boxes."""
+    g = blank()
+    rect(g, 5, 10, 18, 21, 3)
+    polygon(g, [(2.5, 10.5), (11.5, .5), (20.5, 10.5)], 2)
+    for x in (5, 9, 14, 18):
+        rect(g, x, 10, x, 21, 4)
+    for y in (10, 15):
+        rect(g, 5, y, 18, y, 4)
+    line(g, 9, 15, 14, 10, 4)
+    line(g, 9, 10, 14, 15, 4)
+    for x0 in (6, 15):
+        rect(g, x0, 17, x0 + 2, 19, 1)
+        rect(g, x0, 20, x0 + 2, 20, 2)
+    rect(g, 11, 17, 12, 21, 1)
+    rect(g, 10, 5, 13, 7, 3)
+    return outline(g)
+
+
+def corbeau():
+    """Master Crow on his branch, holding the cheese in his beak (La Fontaine)."""
+    g = blank()
+    line(g, 0, 20, 23, 17, 3, width=2)
+    line(g, 17, 18, 21, 14, 3)
+    line(g, 10, 15, 10, 19, 1)
+    line(g, 13, 15, 13, 18, 1)
+    polygon(g, [(14, 12), (22, 17), (20.5, 11.5)], 2)
+    ellipse(g, 11.5, 11.5, 5.5, 4, 2)
+    ellipse(g, 7, 7.5, 3.1, 2.7, 2)
+    polygon(g, [(4.4, 7), (.8, 8.6), (4.4, 9.2)], 1)
+    polygon(g, [(0, 9), (3.6, 9.4), (1.5, 12.5)], 4)
+    g = outline(g)
+    g[6][7] = 4
+    return g
+
+
 VIGNETTES = [
     ("tour Eiffel", "Eiffel tower", tour_eiffel, ["#1b2440", "#2b2320", "#7a5a3c", "#b98c55", "#ffd76a"]),
     ("Arc de Triomphe", "Arc de Triomphe", arc_de_triomphe, ["#000000", "#4a4036", "#e8dcc4", "#c9b892", "#2f4a9a"]),
@@ -328,6 +776,32 @@ VIGNETTES = [
     ("drapeau français", "French flag", drapeau_francais, ["#000000", "#2b2320", "#1d3fbb", "#ffffff", "#e63946"]),
     ("boules de pétanque", "petanque balls", boules_de_petanque, ["#000000", "#30363d", "#9aa3ad", "#e8edf2", "#d1495b"]),
     ("vélo", "bicycle", velo, ["#000000", "#1a1a20", "#2b2b33", "#9aa3ad", "#e63946"]),
+    ("chaise bleue", "blue chair of Nice", chaise_bleue, ["#000000", "#10243f", "#2f6fb5", "#5aa0e6", "#1d4a80"]),
+    ("palmier", "palm tree", palmier, ["#000000", "#1e2a14", "#3f8f3a", "#8b5e3c", "#a7713f"]),
+    ("tapis rouge", "red carpet", tapis_rouge, ["#000000", "#3a0d12", "#d62828", "#e0b13a", "#9d1c22"]),
+    ("Palme d'or", "Palme d'Or", palme_d_or, ["#000000", "#5a3d0a", "#e0b13a", "#fff0a8", "#4a6fa5"]),
+    ("Cité de Carcassonne", "Carcassonne medieval city", carcassonne, ["#000000", "#2b2b33", "#d8c9a8", "#4a5a78", "#c0392b"]),
+    ("château de Versailles", "Palace of Versailles", chateau_de_versailles, ["#000000", "#3a3326", "#efe3c8", "#4b5a75", "#e0b13a"]),
+    ("Notre-Dame de Paris", "Notre-Dame de Paris", notre_dame, ["#000000", "#3b3a36", "#d9cfba", "#9c9280", "#3d5aa8"]),
+    ("Capitole de Toulouse", "Capitole de Toulouse", capitole_toulouse, ["#000000", "#4a2a24", "#e07a6a", "#f6eadf", "#4a5a78"]),
+    ("avion de ligne", "airliner", avion_de_ligne, ["#000000", "#1e2a3a", "#f4f6fa", "#3045d1", "#9aa3ad"]),
+    ("violettes", "violets", violettes, ["#000000", "#2a1830", "#7b4bbd", "#e8d9ff", "#5b8e3b"]),
+    ("lac d'Annecy", "lake Annecy", lac_d_annecy, ["#000000", "#1f2d3d", "#5d7a8c", "#f4f6f8", "#3a86c8"]),
+    ("château de Chambord", "Chambord castle", chambord, ["#000000", "#2f3440", "#efe8d8", "#4e5b70", "#8aa6c8"]),
+    ("pont d'Avignon", "Avignon bridge", pont_d_avignon, ["#000000", "#3a3226", "#d8c39a", "#a88f62", "#3a86c8"]),
+    ("huître", "oyster", huitre, ["#000000", "#3a3530", "#8d8577", "#eceae4", "#c9c2a8"]),
+    ("falaises d'Étretat", "Etretat cliffs", etretat, ["#000000", "#3d4450", "#ede9df", "#b9b5aa", "#3a86c8"]),
+    ("remparts de Saint-Malo", "Saint-Malo ramparts", remparts_saint_malo, ["#000000", "#2b2f38", "#c9c3b6", "#4e586a", "#3a86c8"]),
+    ("sardine", "sardine", sardine, ["#000000", "#1d2b3a", "#3d6e9c", "#dfe6ee", "#2a4a6a"]),
+    ("glacière", "cool box", glaciere, ["#000000", "#1d2b3a", "#2f80c4", "#f4f6fa", "#e63946"]),
+    ("tartine chocolatée", "bread with chocolate spread", tartine, ["#000000", "#3b2414", "#6b3a1e", "#f3d7a3", "#c48a45"]),
+    ("bol breton", "breton bowl", bol_breton, ["#000000", "#1d2b3a", "#f6f3ea", "#2f5fb3", "#7b3f1d"]),
+    ("guitare électrique", "electric guitar", guitare_electrique, ["#000000", "#1a1a20", "#d62828", "#f4efe6", "#a0632e"]),
+    ("batterie", "drum kit", batterie, ["#000000", "#1a1a20", "#d62828", "#f4f4f4", "#e0b13a"]),
+    ("micro", "microphone", micro, ["#000000", "#1a1a20", "#9aa3ad", "#e8edf2", "#2b2b33"]),
+    ("cigogne", "white stork", cigogne, ["#000000", "#1a1a1a", "#f6f6f4", "#26262b", "#e2572b"]),
+    ("maison alsacienne", "Alsatian half-timbered house", maison_alsacienne, ["#000000", "#2b1d14", "#b8432f", "#f3e6c8", "#6b3e22"]),
+    ("corbeau", "crow", corbeau, ["#000000", "#000000", "#2d2d38", "#7a4a2a", "#f2c94c"]),
 ]
 
 
@@ -344,7 +818,7 @@ def main():
     if len(sys.argv) > 1:
         from PIL import Image, ImageDraw
         scale, cell = 8, 24 * 8 + 10
-        sheet = Image.new("RGB", (6 * cell, 3 * (cell + 16)), (230, 230, 235))
+        sheet = Image.new("RGB", (6 * cell, ((len(entries) + 5) // 6) * (cell + 16)), (230, 230, 235))
         draw = ImageDraw.Draw(sheet)
         for i, (name, _, palette_hex, tokens) in enumerate(entries):
             colours = [tuple(int(palette_hex[k * 6 + j:k * 6 + j + 2], 16) for j in (0, 2, 4)) for k in range(5)]
