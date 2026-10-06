@@ -7,6 +7,10 @@ import { extname, join, normalize } from 'node:path';
 const ROOT = normalize(join(import.meta.dirname, '..'));
 const PORT = Number(process.env.PORT || 8080);
 const GALLERY = process.env.ATELIER_GALLERY || 'https://pixelgpt-iagora.vercel.app';
+// The isolation headers enable multi-threaded WebAssembly; some embedded browsers refuse such pages, so
+// ATELIER_ISOLATION=0 turns them off (WebGPU still works, the CPU fallback then uses a single thread).
+const ISOLATION = process.env.ATELIER_ISOLATION !== '0'
+  ? { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' } : {};
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.wasm': 'application/wasm', '.onnx': 'application/octet-stream',
@@ -42,7 +46,7 @@ createServer(async (req, res) => {
     const { size } = statSync(file);
     res.writeHead(200, {
       'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Content-Length': size,
-      'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp',
+      ...ISOLATION,
       'Cross-Origin-Resource-Policy': 'same-origin', 'Cache-Control': 'no-cache'
     });
     createReadStream(file).pipe(res);

@@ -78,7 +78,8 @@ tools/                       assemblage du moteur, serveur local, scripts de con
   npm run bundle
   npm run atelier
   ```
-  puis ouvrez http://localhost:8080.
+  puis ouvrez http://localhost:8080. Si un navigateur intégré refuse la page, lancez
+  `ATELIER_ISOLATION=0 npm run atelier` (sans les en-têtes d'isolation ; la carte graphique reste utilisée).
 - **Déployer** : `vercel deploy --prod` (Vercel installe les dépendances et assemble le moteur).
 
 ## Reconvertir le modèle
