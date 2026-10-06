@@ -16,6 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "static" / "data" / "compositions.json"
 CACHE = Path(__file__).resolve().parent / ".sprite-cache.json"
+# Hand-drawn vignettes (tools/handmade_vignettes.py), used as "main:<name>" in the cards below.
+HANDMADE = {entry[0]: entry for entry in json.loads((ROOT / "static" / "data" / "handmade.json").read_text())["sprites"]}
 SERVER = "http://127.0.0.1:8000/api/generate"
 
 # French name shown in the editor -> English prompt the model understands (each one checked visually).
@@ -107,15 +109,15 @@ VILLES, MER, NATURE, GASTRO, FETES, CAMPAGNE, CONTES = (
 
 CARDS = [
     # Villes et monuments
-    card("Paris la nuit", VILLES, L, "nuit", "hero", ["tour Eiffel@1", "chat noir", "lanterne", "lune", "étoile"]),
-    card("Bons baisers de Paris", VILLES, L, "tricolore", "hero_t", ["tour Eiffel", "caniche", "tasse de café", "cœur"],
+    card("Paris la nuit", VILLES, L, "nuit", "hero", ["main:tour Eiffel", "chat noir", "lanterne", "lune", "étoile"]),
+    card("Bons baisers de Paris", VILLES, L, "tricolore", "hero_t", ["main:tour Eiffel", "caniche", "tasse de café", "cœur"],
          T("Bons baisers de Paris", "Lobster", "arcenciel", "arche")),
-    card("Montmartre", VILLES, L, "nuit", "row", ["moulin", "chat noir", "tasse de café", "lune", "étoile"]),
-    card("Le Louvre", VILLES, L, "iagora", "center", ["pyramide de verre@4", "couronne", "parfum@4", "étoile", "étoile"]),
+    card("Montmartre", VILLES, L, "nuit", "row", ["main:Moulin Rouge", "chat noir", "main:Sacré-Cœur", "lune", "étoile"]),
+    card("Le Louvre", VILLES, L, "iagora", "center", ["main:pyramide du Louvre", "couronne", "parfum@4", "étoile", "étoile"]),
     card("Notre-Dame", VILLES, P, "nuit", "portrait", ["cathédrale", "cloche", "chouette", "lune", "étoile"]),
     card("Souvenir de Versailles", VILLES, L, "quete", "row_t", ["fontaine", "château", "cygne"],
          T("Souvenir de Versailles", "Pacifico", "or", "droit")),
-    card("L'Arc de Triomphe", VILLES, L, "tricolore", "center", ["arche de pierre@8", "voiture ancienne@8", "drapeau", "étoile", "étoile"]),
+    card("L'Arc de Triomphe", VILLES, L, "tricolore", "center", ["main:Arc de Triomphe", "voiture ancienne@8", "main:drapeau français", "étoile", "étoile"]),
     card("Bisous d'Alsace", VILLES, P, "campagne", "portrait_t", ["cathédrale", "cigogne@3", "cœur", "maison"],
          T("Bisous d'Alsace !", "Lobster", "relief", "vague", "#e76f51")),
     card("Fête des Lumières à Lyon", VILLES, L, "fete", "row_t", ["lanterne", "bougie", "lanterne"],
@@ -125,14 +127,14 @@ CARDS = [
     card("Promenade des Anglais", VILLES, L, "riviera", "row", ["palmier", "parasol", "palmier", "soleil", "mouette"]),
     card("Festival de Cannes", VILLES, L, "fete", "center_tb", ["trophée", "palmier", "étoile filante"],
          T("Festival de Cannes", "Anton", "or", "droit", where="bottom")),
-    card("Mont-Saint-Michel", VILLES, P, "bretagne", "portrait", ["château", "mouette", "coquillage", "lune", "nuage"]),
+    card("Mont-Saint-Michel", VILLES, P, "bretagne", "portrait", ["main:Mont-Saint-Michel", "mouette", "coquillage", "lune", "nuage"]),
     card("Carcassonne", VILLES, L, "quete", "hero_t", ["château", "chevalier", "épée", "couronne"],
          T("Carcassonne", "Anton", "chrome", "arche")),
     card("Toulouse, la ville rose", VILLES, L, "iagora", "row_t", ["avion", "fusée", "planète"],
          T("Toulouse la ville rose", "Pacifico", "iagora", "vague")),
     card("Annecy", VILLES, L, "alpes", "hero", ["montagne", "cygne", "voilier", "nuage", "soleil"]),
     card("Chambord", VILLES, L, "foret", "hero", ["château", "cerf", "renard", "lune", "étoile"]),
-    card("Paris vu d'en haut", VILLES, P, "ete", "portrait_t", ["montgolfière", "tour Eiffel", "nuage", "mouette"],
+    card("Paris vu d'en haut", VILLES, P, "ete", "portrait_t", ["montgolfière", "main:tour Eiffel", "nuage", "mouette"],
          T("Paris vu d'en haut", "Pacifico", "uni", "sourire", "#f25c54")),
     card("Sur le pont d'Avignon", VILLES, L, "provence", "row_t", ["lavande", "arche de pierre", "soleil"],
          T("Sur le pont d'Avignon", "Lobster", "relief", "arche", "#9b72cf")),
@@ -183,19 +185,19 @@ CARDS = [
          T("Tout là-haut", "Anton", "relief", "droit", "#3e5c76", where="bottom")),
 
     # Gastronomie
-    card("Bon appétit", GASTRO, L, "boulangerie", "row_t", ["pain", "gâteau au chocolat", "tasse de café@7"],
+    card("Bon appétit", GASTRO, L, "boulangerie", "row_t", ["main:baguette", "gâteau au chocolat", "tasse de café@7"],
          T("Bon appétit !", "Lobster", "or", "arche")),
-    card("Plateau de fromages", GASTRO, L, "boulangerie", "row_t", ["fromage", "pain", "part de fromage@8"],
+    card("Plateau de fromages", GASTRO, L, "boulangerie", "row_t", ["fromage", "main:baguette", "main:camembert"],
          T("Fromages de France", "Pacifico", "uni", "droit", "#8c4a1e")),
     card("Escargots de Bourgogne", GASTRO, L, "bordeaux", "row_t", ["escargot", "ail", "verre de vin"],
          T("Escargots de Bourgogne", "Lobster", "or", "vague")),
     card("Bouillabaisse", GASTRO, L, "ete", "hero", ["marmite", "poisson", "crabe", "ail", "soleil"]),
     card("Santé", GASTRO, P, "fete", "portrait_t", ["champagne", "verre de vin", "verre de vin", "étoile filante"],
          T("Santé !", "Pacifico", "or", "droit")),
-    card("Vendanges à Bordeaux", GASTRO, L, "bordeaux", "row", ["bouteille de vin", "verre de vin", "bouteille de vin", "soleil", "nuage"]),
-    card("Pique-nique", GASTRO, L, "campagne", "row_t", ["pain", "fromage", "fraise"],
+    card("Vendanges à Bordeaux", GASTRO, L, "bordeaux", "row", ["bouteille de vin", "verre de vin", "main:grappe de raisin", "soleil", "nuage"]),
+    card("Pique-nique", GASTRO, L, "campagne", "row_t", ["main:baguette", "main:camembert", "fraise"],
          T("Pique-nique !", "Bangers", "arcenciel", "arche")),
-    card("Café de Paris", GASTRO, L, "nuit", "row", ["tasse de café", "gâteau au chocolat", "chat noir", "lune", "étoile"]),
+    card("Café de Paris", GASTRO, L, "nuit", "row", ["tasse de café", "main:croissant", "chat noir", "lune", "étoile"]),
     card("L'heure du goûter", GASTRO, L, "chocolat", "row_t", ["théière", "gâteau au chocolat", "fraise@8"],
          T("L'heure du goûter", "Lobster", "relief", "vague", "#c96f3b")),
     card("Le miel", GASTRO, L, "campagne", "hero", ["pot de miel", "abeille", "tournesol", "abeille", "soleil"]),
@@ -206,10 +208,16 @@ CARDS = [
     card("Tarte aux pommes", GASTRO, L, "automne", "row", ["pomme", "gâteau au chocolat", "pomme", "soleil", "papillon"]),
     card("Chocolat chaud", GASTRO, L, "chocolat", "row_t", ["tasse de café", "gâteau au chocolat", "cœur"],
          T("Chocolat chaud", "Lobster", "chrome", "sourire")),
+    card("Crêperie bretonne", GASTRO, L, "bretagne", "row_t", ["main:crêpe", "main:marinière", "phare"],
+         T("Crêperie bretonne", "Lobster", "relief", "arche", "#1d6fa3")),
+    card("Petit-déjeuner à Paris", GASTRO, L, "boulangerie", "row_t", ["main:croissant", "tasse de café@7", "main:baguette"],
+         T("Bon matin !", "Pacifico", "or", "vague")),
+    card("Salon de thé", GASTRO, L, "iagora", "row_t", ["main:macarons", "théière", "cœur"],
+         T("L'heure du thé", "Pacifico", "iagora", "arche")),
     card("Fruits rouges", GASTRO, L, "campagne", "row", ["fraise", "cerises", "pomme", "papillon", "abeille"]),
 
     # Fêtes et traditions
-    card("Vive le 14 Juillet", FETES, L, "tricolore", "row_t", ["coq", "drapeau", "étoile filante"],
+    card("Vive le 14 Juillet", FETES, L, "tricolore", "row_t", ["coq", "main:drapeau français", "étoile filante"],
          T("Vive le 14 Juillet !", "Bangers", "relief", "arche", "#1d3fbb")),
     card("Tirons les rois", FETES, L, "boulangerie", "row_t", ["couronne", "gâteau au chocolat", "cadeau"],
          T("Tirons les rois !", "Pacifico", "or", "arche")),
@@ -231,7 +239,7 @@ CARDS = [
          T("Bouh !", "Bangers", "feu", "vague")),
     card("Joyeux anniversaire", FETES, L, "fete", "row_t", ["cadeau", "gâteau au chocolat", "bougie"],
          T("Joyeux anniversaire", "Lobster", "arcenciel", "arche")),
-    card("Tour de France", FETES, L, "tricolore", "row_t", ["vélo", "trophée", "soleil"],
+    card("Tour de France", FETES, L, "tricolore", "row_t", ["main:vélo", "trophée", "soleil"],
          T("Allez, allez !", "Bangers", "bd", "vague")),
     card("Allez les Bleus", FETES, L, "tricolore", "row_t", ["coq", "trophée", "étoile"],
          T("Allez les Bleus !", "Anton", "relief", "arche", "#1d3fbb")),
@@ -241,12 +249,19 @@ CARDS = [
     card("Pendaison de crémaillère", FETES, L, "campagne", "row_t", ["maison", "clé ancienne", "cadeau"],
          T("Bienvenue chez nous", "Lobster", "uni", "sourire", "#e76f51")),
 
+    card("Ooh là là", FETES, L, "tricolore", "row_t", ["main:béret", "main:baguette", "main:marinière"],
+         T("Ooh là là !", "Lobster", "arcenciel", "arche")),
+    card("Bal musette", FETES, L, "fete", "row_t", ["main:accordéon", "verre de vin", "cœur"],
+         T("Bal musette", "Pacifico", "neon", "vague", "#ffd60a")),
+    card("Partie de pétanque", FETES, L, "riviera", "row_t", ["main:boules de pétanque", "soleil", "verre de vin"],
+         T("Tu tires ou tu pointes ?", "Bangers", "bd", "droit", size=.1)),
+
     # Campagne et animaux
     card("Bonjour de la ferme", CAMPAGNE, L, "campagne", "row_t", ["vache", "coq", "mouton"],
          T("Bonjour de la ferme", "Lobster", "relief", "arche", "#2a9d8f")),
     card("Cocorico", CAMPAGNE, P, "tricolore", "portrait_t", ["coq", "soleil", "nuage", "étoile"],
          T("Cocorico !", "Bangers", "bd", "arche")),
-    card("Caniche à Paris", CAMPAGNE, L, "iagora", "hero", ["tour Eiffel", "caniche", "cœur", "nuage", "étoile"]),
+    card("Caniche à Paris", CAMPAGNE, L, "iagora", "hero", ["main:tour Eiffel", "caniche", "cœur", "nuage", "étoile"]),
     card("Les chats de Paris", CAMPAGNE, L, "nuit", "row", ["chat noir", "lune", "chat noir", "étoile", "étoile"]),
     card("Les cigognes d'Alsace", CAMPAGNE, L, "campagne", "hero", ["cigogne@3", "maison", "cœur", "nuage", "soleil"]),
     card("Le lac aux cygnes", CAMPAGNE, L, "ete", "row", ["cygne", "cygne", "voilier", "nuage", "soleil"]),
@@ -307,7 +322,8 @@ EXTRA_SEEDS = (3, 4, 5, 6)
 def main():
     cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}
     jobs = sorted({(VOCAB[name.split("@")[0]], int(name.split("@")[1]) if "@" in name else seed, c["palette"])
-                   for c in CARDS for name in c["sprites"] for seed in ((1, 2) if "@" not in name else (0,))})
+                   for c in CARDS for name in c["sprites"] if not name.startswith("main:")
+                   for seed in ((1, 2) if "@" not in name else (0,))})
     missing = [job for job in jobs if f"{job[0]}|{job[1]}|{job[2]}" not in cache]
     print(f"{len(missing)} sprites to generate")
     for index, (prompt, seed, palette) in enumerate(missing):
@@ -323,7 +339,7 @@ def main():
         tokens = cache[f"{prompt}|{best}|{palette}"]
         return border_fill(tokens) > .15 or sum(t != "0" for t in tokens) / 576 < .12
     retry = sorted({(VOCAB[n], c["palette"]) for c in CARDS for n in c["sprites"] if "@" not in n
-                    and weak(VOCAB[n], c["palette"])})
+                    and not n.startswith("main:") and weak(VOCAB[n], c["palette"])})
     extra = [(prompt, seed, palette) for prompt, palette in retry for seed in EXTRA_SEEDS
              if f"{prompt}|{seed}|{palette}" not in cache]
     print(f"{len(retry)} weak sprites, {len(extra)} extra generations")
@@ -337,6 +353,11 @@ def main():
         slots = LAYOUTS[c["layout"]]
         sprites = []
         for name, (cx, cy, size) in zip(c["sprites"], slots):
+            if name.startswith("main:"):
+                label, _, palette_hex, tokens = HANDMADE[name[5:]]
+                sprites.append({"name": label, "handmade": True, "cx": cx, "cy": cy, "size": size, "tokens": tokens,
+                                "palette": [f"#{palette_hex[i:i + 6]}" for i in range(0, 30, 6)]})
+                continue
             label, _, forced = name.partition("@")
             prompt = VOCAB[label]
             seeds = [int(forced)] if forced else [1, 2] + (list(EXTRA_SEEDS) if (prompt, c["palette"]) in retried else [])

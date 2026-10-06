@@ -487,7 +487,9 @@ function renderUI() {
   }
   const spriteSelection = selection.filter(item => !isText(item));
   selectedName.textContent = selection.length > 1 ? `${selection.length} objets` : selected.name;
-  regenerateButton.disabled = selection.length !== 1 || isGenerating;
+  regenerateButton.disabled = selection.length !== 1 || isGenerating || Boolean(selected.handmade);
+  regenerateButton.title = selected.handmade ? 'Vignette dessinée à la main : le modèle ne sait pas la redessiner. Retouchez-la au crayon.' : '';
+  document.querySelector('#editPixelsButton').disabled = selection.length !== 1;
   paletteElement.replaceChildren();
   selected.palette.slice(1).forEach((color, visibleIndex) => {
     const label = document.createElement('label');
@@ -1201,12 +1203,13 @@ function tokensFromString(value) {
   return Array.from(value, Number);
 }
 
-function addSprite({ name, prompt, tokens, palette, seed = null }) {
+function addSprite({ name, prompt, tokens, palette, seed = null, handmade = false }) {
   if (isGenerating) return;
   const before = captureState();
   const { pixelSize, x, y } = spawnPlacement();
   const sprite = {
-    id: nextId++, name, prompt, seed, tokens, palette, transparentIndex: 0, pixelSize, x, y, groupId: null, bitmapDirty: true
+    id: nextId++, name, prompt, seed, tokens, palette, transparentIndex: 0, pixelSize, x, y, groupId: null, bitmapDirty: true,
+    ...(handmade ? { handmade: true } : {})
   };
   sprites.push(sprite);
   selectedIds.clear();
@@ -1231,7 +1234,8 @@ function loadComposition(composition) {
     const half = pixelSize * 12;
     sprites.push({
       id: nextId++, name: item.name, prompt: item.prompt, seed: item.seed, tokens: tokensFromString(item.tokens),
-      palette: [...composition.palette], transparentIndex: 0, pixelSize,
+      palette: [...(item.palette ?? composition.palette)], transparentIndex: 0, pixelSize,
+      ...(item.handmade ? { handmade: true } : {}),
       x: card.x + item.cx * card.w - half, y: card.y + item.cy * card.h - half, groupId: null, bitmapDirty: true
     });
   });
@@ -1284,7 +1288,7 @@ function compositionPreview(composition) {
   composition.sprites.forEach(item => {
     const pixel = Math.max(1, Math.round(item.size * preview.height / 24));
     const half = pixel * 12;
-    paintTokens(preview, tokensFromString(item.tokens), composition.palette)(
+    paintTokens(preview, tokensFromString(item.tokens), item.palette ?? composition.palette)(
       Math.round(item.cx * preview.width - half), Math.round(item.cy * preview.height - half), pixel
     );
   });
@@ -1352,7 +1356,17 @@ function renderCompositions() {
 
 async function loadLibraryData() {
   if (!compositions) compositions = await (await fetch('/static/data/compositions.json')).json();
-  if (!libraryData) libraryData = await (await fetch('/static/data/library.json')).json();
+  if (!libraryData) {
+    const [dataset, handmade] = await Promise.all([
+      fetch('/static/data/library.json').then(response => response.json()),
+      fetch('/static/data/handmade.json').then(response => response.json())
+    ]);
+    const family = dataset.families.length;
+    dataset.families.push(handmade.family);
+    dataset.sprites.push(...handmade.sprites.map(([name, english, palette, tokens]) => [family, name, english, palette, tokens, true]));
+    dataset.handmadeFamily = family;
+    libraryData = dataset;
+  }
 }
 
 function showLibraryTab(tab) {
@@ -1369,17 +1383,19 @@ function showLibraryTab(tab) {
     renderCompositions();
     return;
   }
-  libraryHint.textContent = 'Exemples du jeu de données qui a servi à entraîner le modèle. Cliquez sur une vignette pour la poser sur la carte ; « Régénérer » en fera une variante avec le modèle.';
+  libraryHint.textContent = Number(tab) === libraryData.handmadeFamily
+    ? 'Monuments et spécialités que le modèle ne sait pas dessiner, dessinés à la main pour l’atelier. Couleurs modifiables et pixels retouchables au crayon.'
+    : 'Exemples du jeu de données qui a servi à entraîner le modèle. Cliquez sur une vignette pour la poser sur la carte ; « Régénérer » en fera une variante avec le modèle.';
   libraryData.sprites.filter(entry => entry[0] === Number(tab)).forEach(entry => libraryGrid.append(libraryTile(entry)));
 }
 
-function libraryTile([, caption, english, paletteHex, tokenString]) {
+function libraryTile([, caption, english, paletteHex, tokenString, handmade = false]) {
   const palette = paletteHex.match(/.{6}/g).map(hex => `#${hex}`);
   const tokens = tokensFromString(tokenString);
   const item = document.createElement('button');
   item.type = 'button';
   item.className = 'library-item';
-  item.title = `${caption} (${english})`;
+  item.title = handmade ? `${caption} (dessinée à la main)` : `${caption} (${english})`;
   const tile = document.createElement('canvas');
   tile.width = 24;
   tile.height = 24;
@@ -1389,7 +1405,7 @@ function libraryTile([, caption, english, paletteHex, tokenString]) {
   item.append(tile, label);
   item.addEventListener('click', () => {
     closeLibrary();
-    addSprite({ name: caption, prompt: english, tokens, palette });
+    addSprite({ name: caption, prompt: handmade ? null : english, tokens, palette, handmade });
   });
   return item;
 }
@@ -1474,11 +1490,13 @@ async function openLibrary(tab = 'compositions') {
     return;
   }
   if (!libraryTabs.children.length) {
-    const tabs = [['compositions', 'Compositions'], ...libraryData.families.map((label, index) => [String(index), label])];
+    const families = libraryData.families.map((label, index) => [String(index), label]);
+    const handmade = families.splice(libraryData.handmadeFamily, 1);
+    const tabs = [['compositions', 'Compositions'], ...handmade, ...families];
     tabs.forEach(([key, label], index) => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = `ia-tag${index === 0 ? ' first' : ''}`;
+      button.className = `ia-tag${index < 2 ? ' first' : ''}`;
       button.dataset.tab = key;
       button.textContent = label;
       button.addEventListener('click', () => {
@@ -1535,6 +1553,14 @@ function isTypingField(element) {
 }
 
 document.addEventListener('keydown', event => {
+  if (!pixelEditor.hidden) {
+    if (event.key === 'Escape') closePixelEditor(false);
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      undoPixelStroke();
+    }
+    return;
+  }
   if (!library.hidden || !publishDialog.hidden || !aboutDialog.hidden) {
     if (event.key === 'Escape') {
       closeLibrary();
@@ -1587,6 +1613,193 @@ document.addEventListener('keydown', event => {
   if (event.key === '[') moveLayer(false);
   if (event.key === ']') moveLayer(true);
   if (event.key === 'Escape') select(null);
+});
+
+// --- Pixel editor: retouch a vignette (or draw a new one) on a 24 x 24 grid with its five colours.
+
+const pixelEditor = document.querySelector('#pixelEditor');
+const pixelCanvas = document.querySelector('#pixelCanvas');
+const pixelContext = pixelCanvas.getContext('2d');
+const pixelColors = document.querySelector('#pixelColors');
+const pixelColorInput = document.querySelector('#pixelColorInput');
+const DRAWING_PALETTE = ['#000000', '#14141a', '#ffffff', '#3045d1', '#ff50be'];
+let pixel = null;
+
+function openPixelEditor(sprite, { isNew = false, before = null } = {}) {
+  pixel = { sprite, tokens: [...sprite.tokens], palette: [...sprite.palette], history: [], tool: 'pencil', color: 1, isNew, before, painting: false };
+  document.querySelector('#pixelEditorTitle').textContent = isNew ? 'Dessiner une vignette.' : 'Retoucher la vignette.';
+  renderPixelTools();
+  drawPixelGrid();
+  pixelEditor.hidden = false;
+}
+
+function renderPixelTools() {
+  document.querySelectorAll('#pixelToolButtons button').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.tool === pixel.tool));
+  });
+  pixelColors.replaceChildren(...[1, 2, 3, 4].map(index => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.style.background = pixel.palette[index];
+    button.setAttribute('aria-label', `Couleur ${index}`);
+    button.setAttribute('aria-pressed', String(pixel.color === index && pixel.tool !== 'eraser'));
+    button.addEventListener('click', () => {
+      pixel.color = index;
+      if (pixel.tool === 'eraser' || pixel.tool === 'picker') pixel.tool = 'pencil';
+      renderPixelTools();
+    });
+    return button;
+  }));
+  pixelColorInput.value = pixel.palette[pixel.color];
+}
+
+function drawPixelGrid() {
+  const cell = pixelCanvas.width / 24;
+  for (let index = 0; index < 576; index++) {
+    const x = (index % 24) * cell;
+    const y = Math.floor(index / 24) * cell;
+    const role = pixel.tokens[index];
+    if (role) {
+      pixelContext.fillStyle = pixel.palette[role];
+      pixelContext.fillRect(x, y, cell, cell);
+    } else {
+      // Checkerboard shows transparency.
+      pixelContext.fillStyle = '#ffffff';
+      pixelContext.fillRect(x, y, cell, cell);
+      pixelContext.fillStyle = '#e3e3e9';
+      pixelContext.fillRect(x, y, cell / 2, cell / 2);
+      pixelContext.fillRect(x + cell / 2, y + cell / 2, cell / 2, cell / 2);
+    }
+  }
+  pixelContext.strokeStyle = 'rgba(20, 20, 26, .12)';
+  pixelContext.lineWidth = 1;
+  for (let line = 1; line < 24; line++) {
+    pixelContext.beginPath();
+    pixelContext.moveTo(line * cell + .5, 0);
+    pixelContext.lineTo(line * cell + .5, pixelCanvas.height);
+    pixelContext.moveTo(0, line * cell + .5);
+    pixelContext.lineTo(pixelCanvas.width, line * cell + .5);
+    pixelContext.stroke();
+  }
+}
+
+function pixelIndex(event) {
+  const rect = pixelCanvas.getBoundingClientRect();
+  const x = Math.floor((event.clientX - rect.left) / rect.width * 24);
+  const y = Math.floor((event.clientY - rect.top) / rect.height * 24);
+  return x >= 0 && x < 24 && y >= 0 && y < 24 ? y * 24 + x : null;
+}
+
+function floodFill(start, role) {
+  const target = pixel.tokens[start];
+  if (target === role) return;
+  const stack = [start];
+  while (stack.length) {
+    const index = stack.pop();
+    if (pixel.tokens[index] !== target) continue;
+    pixel.tokens[index] = role;
+    const x = index % 24;
+    if (x > 0) stack.push(index - 1);
+    if (x < 23) stack.push(index + 1);
+    if (index >= 24) stack.push(index - 24);
+    if (index < 552) stack.push(index + 24);
+  }
+}
+
+function applyPixelTool(index, erase) {
+  if (index == null) return;
+  const tool = erase ? 'eraser' : pixel.tool;
+  if (tool === 'picker') {
+    const role = pixel.tokens[index];
+    if (role) pixel.color = role;
+    pixel.tool = role ? 'pencil' : 'eraser';
+    renderPixelTools();
+    return;
+  }
+  if (tool === 'fill') floodFill(index, pixel.color);
+  else pixel.tokens[index] = tool === 'eraser' ? 0 : pixel.color;
+  drawPixelGrid();
+}
+
+pixelCanvas.addEventListener('contextmenu', event => event.preventDefault());
+pixelCanvas.addEventListener('pointerdown', event => {
+  if (!pixel) return;
+  pixel.history.push([...pixel.tokens]);
+  pixel.painting = true;
+  pixel.erasing = event.button === 2;
+  pixelCanvas.setPointerCapture(event.pointerId);
+  applyPixelTool(pixelIndex(event), pixel.erasing);
+});
+pixelCanvas.addEventListener('pointermove', event => {
+  if (!pixel?.painting || pixel.tool === 'fill' || pixel.tool === 'picker') return;
+  applyPixelTool(pixelIndex(event), pixel.erasing);
+});
+pixelCanvas.addEventListener('pointerup', () => { if (pixel) pixel.painting = false; });
+pixelCanvas.addEventListener('pointercancel', () => { if (pixel) pixel.painting = false; });
+document.querySelectorAll('#pixelToolButtons button').forEach(button => button.addEventListener('click', () => {
+  pixel.tool = button.dataset.tool;
+  renderPixelTools();
+}));
+pixelColorInput.addEventListener('input', () => {
+  pixel.palette[pixel.color] = pixelColorInput.value;
+  renderPixelTools();
+  drawPixelGrid();
+});
+
+function undoPixelStroke() {
+  const previous = pixel?.history.pop();
+  if (!previous) return;
+  pixel.tokens = previous;
+  drawPixelGrid();
+}
+
+document.querySelector('#pixelUndo').addEventListener('click', undoPixelStroke);
+document.querySelector('#pixelClear').addEventListener('click', () => {
+  pixel.history.push([...pixel.tokens]);
+  pixel.tokens.fill(0);
+  drawPixelGrid();
+});
+
+function closePixelEditor(save) {
+  if (!pixel) return;
+  const { sprite, isNew, before } = pixel;
+  if (save) {
+    const previous = before ?? captureState();
+    sprite.tokens = pixel.tokens;
+    sprite.palette = pixel.palette;
+    sprite.bitmapDirty = true;
+    commitHistory(isNew ? 'Dessiner une vignette' : 'Retoucher les pixels', previous);
+    status.textContent = isNew ? 'Votre dessin est sur la carte.' : `Vignette « ${sprite.name} » retouchée.`;
+  } else if (isNew) {
+    const index = sprites.indexOf(sprite);
+    if (index >= 0) sprites.splice(index, 1);
+    selectedIds.clear();
+    primaryId = null;
+  }
+  pixel = null;
+  pixelEditor.hidden = true;
+  renderUI();
+  draw();
+}
+
+document.querySelector('#pixelSave').addEventListener('click', () => closePixelEditor(true));
+document.querySelectorAll('[data-pixel-cancel]').forEach(button => button.addEventListener('click', () => closePixelEditor(false)));
+document.querySelector('#editPixelsButton').addEventListener('click', () => {
+  const sprite = selectedSprite();
+  if (sprite && !isText(sprite)) openPixelEditor(sprite);
+});
+document.querySelector('#addDrawingButton').addEventListener('click', () => {
+  const before = captureState();
+  const { pixelSize, x, y } = spawnPlacement();
+  const sprite = {
+    id: nextId++, name: 'mon dessin', tokens: Array(576).fill(0), palette: [...DRAWING_PALETTE], transparentIndex: 0,
+    pixelSize, x, y, groupId: null, handmade: true, bitmapDirty: true
+  };
+  sprites.push(sprite);
+  selectedIds.clear();
+  selectedIds.add(sprite.id);
+  primaryId = sprite.id;
+  openPixelEditor(sprite, { isNew: true, before });
 });
 
 // --- In-browser model

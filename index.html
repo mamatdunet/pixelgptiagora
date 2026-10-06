@@ -62,6 +62,7 @@
           <button id="randomPaletteButton" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Palette au hasard</button>
           <button id="regenerateButton" class="ia-btn ia-btn--primary ia-btn--sm" type="button">Régénérer</button>
         </div>
+        <button id="editPixelsButton" class="ia-btn ia-btn--accent ia-btn--sm" type="button">Retoucher au crayon</button>
       </div>
       <div class="panel-section">
         <span class="section-label">Transformer</span>
@@ -154,8 +155,8 @@
       <p class="library-credit">Les 1 520 vignettes des familles viennent du jeu de données
         <a href="https://huggingface.co/datasets/unstonio/pixelgpt-24x24-20k" target="_blank" rel="noopener">PixelGPT 24×24 (20K)</a>
         par unstonio, licence <a href="https://creativecommons.org/licenses/by/4.0/deed.fr" target="_blank" rel="noopener">CC BY 4.0</a>
-        (légendes traduites automatiquement). Les cartes d'exemple ont été composées pour l'atelier avec des vignettes
-        générées par le modèle PixelGPT.</p>
+        (légendes traduites automatiquement). La famille « Patrimoine dessiné à la main » a été dessinée pour l'atelier,
+        et les cartes d'exemple composées avec des vignettes générées par le modèle PixelGPT ou dessinées à la main.</p>
     </div>
   </div>
 
@@ -207,15 +208,74 @@
           <li>★ <strong>Vignettes de la bibliothèque</strong> : jeu de données
             <a href="https://huggingface.co/datasets/unstonio/pixelgpt-24x24-20k" target="_blank" rel="noopener">PixelGPT 24×24 (20K)</a>
             par unstonio, licence CC BY 4.0. Légendes traduites automatiquement.</li>
-          <li>★ <strong>Cartes d'exemple</strong> : composées pour l'atelier IAgora, avec des vignettes générées par le modèle PixelGPT.</li>
+          <li>★ <strong>Patrimoine dessiné à la main</strong> (tour Eiffel, croissant, baguette…) : dessiné pour l'atelier IAgora.</li>
+          <li>★ <strong>Cartes d'exemple</strong> : composées pour l'atelier IAgora, avec des vignettes générées par le modèle PixelGPT ou dessinées à la main.</li>
           <li>★ <strong>Traduction français → anglais</strong> : opus-mt-fr-en, Helsinki-NLP (université d'Helsinki), licence CC BY 4.0,
             version ONNX de Xenova.</li>
           <li>★ <strong>Compréhension du texte</strong> : all-MiniLM-L6-v2, sentence-transformers, licence Apache 2.0.</li>
           <li>★ <strong>Moteur dans le navigateur</strong> : ONNX Runtime Web (Microsoft, MIT) et Transformers.js (Hugging Face, Apache 2.0).</li>
           <li>★ <strong>Polices</strong> : Anton, Heebo, Press Start 2P, Bangers, Lobster, Pacifico (SIL Open Font License).</li>
         </ul>
+        <span class="section-label">Comment cet atelier a été construit avec l'IA</span>
+        <p>Partant du projet PixelGPT 24×24, l'équipe IAgora a conçu cet atelier en dialogue avec Claude, un assistant
+          d'IA d'Anthropic, qui a écrit le code et fait les tests à partir de nos demandes. Les idées, les choix et
+          les relectures sont humains ; le modèle de génération, lui, reste celui d'unstonio. En résumé :</p>
+        <ul class="making-of">
+          <li>★ <strong>Installer</strong> PixelGPT sur un ordinateur portable et le faire tourner sans service en ligne.</li>
+          <li>★ <strong>Parler français</strong> : les descriptions sont traduites en anglais sur l'ordinateur, avec un petit
+            glossaire pour les mots piégeux (« chouette » n'est pas « nice »).</li>
+          <li>★ <strong>Composer une carte postale</strong> 15 × 10 cm, en paysage ou en portrait, à exporter en 300 dpi ou à
+            imprimer au bon format ; dupliquer, grouper, retoucher les couleurs, annuler.</li>
+          <li>★ <strong>Ne pas partir d'une page blanche</strong> : exemples cliquables, 1 520 vignettes du jeu de données
+            traduites en français avec une recherche, et 109 cartes d'exemple sur la culture française, relues une à une.</li>
+          <li>★ <strong>Écrire</strong> : textes en WordArt un peu kitsch (10 polices, 9 effets, 4 formes).</li>
+          <li>★ <strong>Partager</strong> : une galerie collective en ligne, où seule l'équipe peut retirer une carte.</li>
+          <li>★ <strong>Habiller l'atelier</strong> aux couleurs du design system IAgora et le traduire entièrement.</li>
+          <li>★ <strong>Ne rien perdre</strong> : la carte en cours est gardée dans le navigateur, même après un rechargement.</li>
+          <li>★ <strong>Faire tourner l'IA dans le navigateur</strong> : modèle converti et compressé, environ trois fois plus
+            léger, accéléré par la carte graphique (de 21 à 9 secondes par vignette), traduction réparée pour donner les
+            mêmes résultats qu'à l'origine. Rien à installer : on ouvre le site, c'est tout.</li>
+          <li>★ <strong>Dessiner à la main</strong> ce que l'IA ne sait pas faire (tour Eiffel, croissant, baguette…) et
+            permettre à chacun·e de retoucher une vignette au crayon : l'IA propose, l'humain corrige.</li>
+        </ul>
         <p class="about-foot">Atelier pixel art IAgora · code source :
           <a href="https://github.com/mamatdunet/pixelgptiagora" target="_blank" rel="noopener">github.com/mamatdunet/pixelgptiagora</a></p>
+      </div>
+    </div>
+  </div>
+
+
+  <div id="pixelEditor" class="modal" role="dialog" aria-modal="true" aria-labelledby="pixelEditorTitle" hidden>
+    <div class="modal-window ia-card pixel-window">
+      <div class="panel-heading">
+        <span id="pixelEditorTitle" class="ia-heading">Retoucher la vignette.</span>
+        <button class="ia-icon-btn" type="button" data-pixel-cancel aria-label="Fermer sans enregistrer">×</button>
+      </div>
+      <div class="pixel-body">
+        <canvas id="pixelCanvas" width="480" height="480" aria-label="Grille de 24 par 24 pixels"></canvas>
+        <div class="pixel-tools">
+          <span class="section-label">Outil</span>
+          <div id="pixelToolButtons" class="toggle-row" role="group" aria-label="Outil">
+            <button class="ia-tag" type="button" data-tool="pencil" aria-pressed="true">Crayon</button>
+            <button class="ia-tag" type="button" data-tool="eraser" aria-pressed="false">Gomme</button>
+            <button class="ia-tag" type="button" data-tool="fill" aria-pressed="false">Pot de peinture</button>
+            <button class="ia-tag" type="button" data-tool="picker" aria-pressed="false">Pipette</button>
+          </div>
+          <span class="section-label">Couleur</span>
+          <div id="pixelColors" class="pixel-colors" role="group" aria-label="Couleur du crayon"></div>
+          <label class="ia-field">Changer cette couleur
+            <input id="pixelColorInput" type="color">
+          </label>
+          <div class="button-grid two">
+            <button id="pixelUndo" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Annuler le trait</button>
+            <button id="pixelClear" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Tout effacer</button>
+          </div>
+          <p class="pixel-hint">Cliquez ou glissez sur la grille. Clic droit : gomme. 5 couleurs au maximum, dont la transparence.</p>
+          <div class="publish-actions">
+            <button class="ia-btn ia-btn--ghost" type="button" data-pixel-cancel>Annuler</button>
+            <button id="pixelSave" class="ia-btn ia-btn--primary" type="button">Valider</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -230,6 +290,7 @@
     <div class="creation-tools">
       <button id="libraryButton" class="ia-btn ia-btn--outline" type="button">Bibliothèque</button>
       <button id="addTextButton" class="ia-btn ia-btn--outline" type="button">+ Texte</button>
+      <button id="addDrawingButton" class="ia-btn ia-btn--outline" type="button">+ Dessin</button>
     </div>
     <form id="promptForm" autocomplete="off">
       <label class="sr-only" for="prompt">Décrire une vignette</label>
