@@ -44,9 +44,11 @@ compositions d'exemple, export 300 dpi, impression) et la galerie collective.
   (générateur 44 Mo, traducteur 104 Mo, encodeur 23 Mo, moteur WebAssembly) et les garde en cache ;
   les visites suivantes démarrent tout de suite, même hors connexion. Les descriptions tapées ne
   quittent jamais l'ordinateur.
-- **Vitesse** : quelques secondes par vignette avec une carte graphique (WebGPU, Chrome / Edge / Safari
-  récents), plus lent sur processeur seul. `?moteur=processeur` ou `?moteur=carte-graphique` dans
-  l'adresse force l'un ou l'autre.
+- **Vitesse** : à la première visite, l'atelier mesure la vitesse de la carte graphique (WebGPU) et du
+  processeur (WebAssembly, 4 cœurs) et garde le plus rapide ; les puces graphiques intégrées anciennes
+  (Intel UHD 620…) sont souvent plus lentes que le processeur pour ce modèle. Le temps estimé par
+  vignette s'affiche au démarrage. `?moteur=processeur` ou `?moteur=carte-graphique` dans l'adresse force
+  l'un ou l'autre, `?moteur=mesurer` refait la mesure.
 - **Galerie collective** : « Publier » envoie la carte (PNG) à `api/creations.js`, stockée dans
   Vercel Blob. Supprimer une carte demande le mot de passe de l'atelier (seule son empreinte SHA-256
   est dans le code ; la variable `DELETE_PASSWORD` le remplace).

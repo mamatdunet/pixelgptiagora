@@ -75,7 +75,7 @@ const isText = item => item?.type === 'text';
 
 // Everything except caches and animation handles, deep-copied so later edits cannot leak into history.
 function serializeItem(item) {
-  const { bitmap, bitmapDirty, dropFrame, rendering, ...data } = item;
+  const { bitmap, bitmapDirty, dropFrame, rendering, generation, ...data } = item;
   return structuredClone(data);
 }
 
@@ -377,6 +377,7 @@ function draw() {
   ctx.fillRect(card.x, card.y, card.w, card.h);
   ctx.restore();
   sprites.forEach(drawItem);
+  sprites.filter(item => item.generation).forEach(drawGenerationProgress);
   drawCardFrame();
   const selection = selectedSprites();
   selection.forEach(selected => {
@@ -399,6 +400,62 @@ function draw() {
     ctx.fillRect(left, top, width, height);
     strokeDashedRect(left + .5, top + .5, width, height, 4);
   }
+}
+
+// While a vignette is generated: its frame, a progress bar along its top edge and the time left.
+function drawGenerationProgress(item) {
+  const box = itemBox(item);
+  const { step, measuredFrom } = item.generation;
+  const x = Math.round(box.x);
+  const y = Math.round(box.y);
+  const width = Math.round(box.w);
+  strokeDashedRect(x - .5, y - .5, width + 1, Math.round(box.h) + 1, 4);
+  ctx.fillStyle = 'rgba(255, 255, 255, .85)';
+  ctx.fillRect(x, y - 10, width, 6);
+  const gradient = ctx.createLinearGradient(x, 0, x + width, 0);
+  gradient.addColorStop(0, '#FF50BE');
+  gradient.addColorStop(1, '#3045D1');
+  ctx.fillStyle = gradient;
+  let label;
+  if (!step) {
+    // Preparing (translation, text analysis): a segment sweeping back and forth.
+    const phase = (performance.now() / 900) % 2;
+    const offset = (phase < 1 ? phase : 2 - phase) * width * .7;
+    ctx.fillRect(x + offset, y - 10, width * .3, 6);
+    label = 'Préparation…';
+  } else {
+    ctx.fillRect(x, y - 10, width * step / 576, 6);
+    let seconds = null;
+    if (measuredFrom && step > measuredFrom.step) {
+      const rate = (step - measuredFrom.step) / (performance.now() - measuredFrom.time);
+      seconds = (576 - step) / rate / 1000;
+    } else if (PixelEngine.secondsPerSprite) {
+      seconds = PixelEngine.secondsPerSprite * (1 - step / 576);
+    }
+    label = `${Math.round(step / 5.76)} %${seconds != null ? ` · encore ${Math.max(1, Math.round(seconds))} s` : ''}`;
+  }
+  ctx.font = '600 11px Heebo, Arial, sans-serif';
+  ctx.textBaseline = 'bottom';
+  const textWidth = ctx.measureText(label).width;
+  ctx.fillStyle = 'rgba(255, 255, 255, .9)';
+  ctx.fillRect(x, y - 27, textWidth + 10, 15);
+  ctx.fillStyle = '#3045D1';
+  ctx.fillText(label, x + 5, y - 13);
+}
+
+let generationFrame = null;
+function animateGenerations() {
+  if (generationFrame) return;
+  const tick = () => {
+    if (!sprites.some(item => item.generation)) {
+      generationFrame = null;
+      draw();
+      return;
+    }
+    draw();
+    generationFrame = requestAnimationFrame(tick);
+  };
+  generationFrame = requestAnimationFrame(tick);
 }
 
 // Alternating white and black dashes stay visible on any background: white shows on dark, black on light.
@@ -708,10 +765,14 @@ async function generateSprite(prompt, existing = null) {
             x, y: targetY - 70, groupId: null,
             bitmapDirty: true
           };
+          sprite.generation = { step: 0, measuredFrom: null };
           sprites.push(sprite);
           select(sprite.id);
           animateDrop(sprite, targetY);
+          animateGenerations();
         } else {
+          sprite.generation = { step: 0, measuredFrom: null };
+          animateGenerations();
           sprite.seed = data.seed;
           sprite.tokens = Array(576).fill(0);
           sprite.palette = data.palette.map(rgbToHex);
@@ -722,9 +783,14 @@ async function generateSprite(prompt, existing = null) {
       } else if (data.type === 'progress') {
         sprite.tokens = data.tokens;
         sprite.bitmapDirty = true;
-        status.textContent = `Génération de « ${sprite.name} » · ${data.step / 24}/24`;
-        draw();
+        if (sprite.generation) {
+          sprite.generation.step = data.step;
+          // The remaining time is measured from the second update on, once drawing has really started.
+          if (!sprite.generation.measuredFrom && data.step >= 16) sprite.generation.measuredFrom = { step: data.step, time: performance.now() };
+        }
+        status.textContent = `Génération de « ${sprite.name} » · ${Math.round(data.step / 5.76)} %`;
       } else if (data.type === 'done') {
+        delete sprite.generation;
         sprite.tokens = data.tokens;
         sprite.seed = data.seed;
         sprite.bitmapDirty = true;
@@ -739,9 +805,11 @@ async function generateSprite(prompt, existing = null) {
       rotatePlaceholder();
     }
   } catch (error) {
+    if (sprite) delete sprite.generation;
     restoreState(before);
     status.textContent = error.message;
   } finally {
+    if (sprite) delete sprite.generation;
     isGenerating = false;
     generateButton.disabled = false;
     renderUI();
@@ -1963,6 +2031,11 @@ function converterTile(label, tokens, palette, onPick, pending = false) {
   const caption = document.createElement('span');
   caption.textContent = label;
   button.append(tile, caption);
+  if (pending) {
+    const bar = document.createElement('i');
+    bar.className = 'converter-progress';
+    button.append(bar);
+  }
   button.addEventListener('click', onPick);
   return button;
 }
@@ -2019,6 +2092,7 @@ async function buildProposals(run, subject) {
       await PixelEngine.generate({ prompt: subject, palette: pixelised.rgb, temperature: .9, seed: 1000 + index * 7919 + Math.floor(Math.random() * 7919) }, event => {
         if (event.type === 'progress' || event.type === 'done') {
           tokens = event.tokens;
+          if (event.type === 'progress') tile.querySelector('.converter-progress')?.style.setProperty('--progress', event.step / 576);
           const context = canvasTile.getContext('2d');
           context.clearRect(0, 0, 24, 24);
           paintTokens(canvasTile, tokens, pixelised.palette)(0, 0, 1);
@@ -2030,6 +2104,7 @@ async function buildProposals(run, subject) {
     }
     if (run.cancelled) return;
     const finalTokens = [...tokens];
+    tile.querySelector('.converter-progress')?.remove();
     tile.disabled = false;
     tile.addEventListener('click', () => pickConverted({
       name: subject, prompt: subject, tokens: finalTokens, palette: [...pixelised.palette]
@@ -2120,17 +2195,42 @@ function formatMegabytes(bytes) {
 }
 
 // ?moteur=processeur or ?moteur=carte-graphique forces a backend (useful to compare speeds on a machine).
-const requestedBackend = { processeur: 'wasm', 'carte-graphique': 'webgpu' }[new URLSearchParams(location.search).get('moteur')] ?? null;
-PixelEngine.load((loaded, total) => {
+// Otherwise the first visit measures which is faster here, and the choice is remembered.
+const ENGINE_CHOICE_KEY = 'iagora-moteur-v1';
+// ?moteur=mesurer forgets the remembered choice and measures again.
+const engineParameter = new URLSearchParams(location.search).get('moteur');
+const requestedBackend = { processeur: 'wasm', 'carte-graphique': 'webgpu' }[engineParameter] ?? null;
+let rememberedEngine = null;
+try {
+  if (engineParameter === 'mesurer') localStorage.removeItem(ENGINE_CHOICE_KEY);
+  rememberedEngine = JSON.parse(localStorage.getItem(ENGINE_CHOICE_KEY));
+} catch {
+  rememberedEngine = null;
+}
+PixelEngine.load((loaded, total, phase) => {
+  if (phase === 'measuring') {
+    engineBar.style.setProperty('--progress', 1);
+    engineLabel.textContent = 'Mesure de la vitesse de cet ordinateur, pour choisir entre carte graphique et processeur (une seule fois)…';
+    return;
+  }
   const ratio = total ? Math.min(1, loaded / total) : 0;
   engineBar.style.setProperty('--progress', ratio);
   engineLabel.textContent = ratio < 1
-    ? `Préparation du modèle d'IA : ${formatMegabytes(loaded)} / ${formatMegabytes(total)} (téléchargé une seule fois sur cet ordinateur)`
+    ? `Téléchargement du modèle d'IA : ${formatMegabytes(loaded)} sur ${formatMegabytes(total)} (une seule fois sur cet ordinateur)`
     : 'Démarrage du modèle d’IA…';
-}, requestedBackend).then(backend => {
+}, requestedBackend ?? rememberedEngine?.backend ?? 'auto').then(backend => {
   engineReady = true;
   document.body.classList.add('engine-ready');
-  engineLabel.textContent = `Modèle d'IA prêt sur cet ordinateur (${backend === 'webgpu' ? 'carte graphique' : 'processeur'}).`;
+  if (!requestedBackend && !rememberedEngine && PixelEngine.secondsPerSprite) {
+    try {
+      localStorage.setItem(ENGINE_CHOICE_KEY, JSON.stringify({ backend, seconds: PixelEngine.secondsPerSprite }));
+    } catch {
+      // Private browsing: the speed test simply runs again next time.
+    }
+  }
+  const seconds = PixelEngine.secondsPerSprite ?? rememberedEngine?.seconds;
+  engineLabel.textContent = `Modèle d'IA prêt sur cet ordinateur (${backend === 'webgpu' ? 'carte graphique' : 'processeur'})` +
+    (seconds ? ` · environ ${seconds} s par vignette.` : '.');
   setTimeout(() => document.querySelector('#engineStatus').classList.add('done'), 4000);
 }).catch(error => {
   document.querySelector('#engineStatus').classList.add('failed');

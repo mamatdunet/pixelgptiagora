@@ -11,12 +11,15 @@ const PixelEngine = (() => {
   let loadingListener = () => {};
   let visionListener = () => {};
   let backend = null;
+  let secondsPerSprite = null;
 
   worker.addEventListener('message', ({ data }) => {
     if (data.type === 'loading') loadingListener(data.loaded, data.total);
+    else if (data.type === 'measuring') loadingListener(null, null, 'measuring');
     else if (data.type === 'vision-loading') visionListener(data.loaded, data.total);
     else if (data.type === 'ready') {
       backend = data.backend;
+      secondsPerSprite = data.secondsPerSprite;
       readyResolve(data.backend);
     } else if (data.type === 'error' && data.id == null) readyReject(new Error(data.message));
     else pending.get(data.id)?.(data);
@@ -42,6 +45,7 @@ const PixelEngine = (() => {
   return {
     ready,
     get backend() { return backend; },
+    get secondsPerSprite() { return secondsPerSprite; },
     load(onLoading, preferredBackend = null) {
       loadingListener = onLoading;
       worker.postMessage({ type: 'load', backend: preferredBackend });
@@ -73,7 +77,8 @@ const PixelEngine = (() => {
       return new Promise((resolve, reject) => {
         pending.set(id, message => {
           try {
-            if (message.type === 'progress') onEvent({ type: 'progress', step: message.step, tokens: message.tokens });
+            if (message.type === 'start') onEvent({ type: 'translated', english: message.english });
+            else if (message.type === 'progress') onEvent({ type: 'progress', step: message.step, tokens: message.tokens });
             else if (message.type === 'done') {
               pending.delete(id);
               onEvent({ type: 'done', prompt, english_prompt: message.english, seed, palette: chosen, tokens: message.tokens, ms: message.ms });

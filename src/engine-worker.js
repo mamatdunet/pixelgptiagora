@@ -31,27 +31,47 @@ env.useBrowserCache = false;
 env.useCustomCache = true;
 env.customCache = modelCache;
 
-const progress = new Map();
-function report(file, loaded, total) {
-  progress.set(file, { loaded, total });
-  let sum = 0, size = 0;
-  for (const entry of progress.values()) {
-    sum += entry.loaded;
-    size += entry.total;
-  }
-  postMessage({ type: 'loading', loaded: sum, total: size });
+// --- Download progress, with exact totals from static/engine/manifest.json (written at build time).
+let manifest = {};
+const downloads = new Map();
+
+function plan(files) {
+  for (const file of files) if (!downloads.has(file)) downloads.set(file, { loaded: 0, total: manifest[file] ?? 0 });
+  postDownloads();
 }
 
-async function fetchCached(path, expectedSize) {
+function postDownloads() {
+  let loaded = 0, total = 0;
+  for (const entry of downloads.values()) {
+    loaded += Math.min(entry.loaded, entry.total);
+    total += entry.total;
+  }
+  postMessage({ type: 'loading', loaded, total });
+}
+
+function report(file, loaded) {
+  const entry = downloads.get(file);
+  if (!entry) return;
+  entry.loaded = loaded;
+  postDownloads();
+}
+
+// transformers.js reports its own downloads ("Xenova/opus-mt-fr-en" + "onnx/encoder_model_uint8.onnx").
+function transformersProgress(event) {
+  const file = `/models/${event.name}/${event.file}`;
+  if (event.status === 'progress' && event.loaded != null) report(file, event.loaded);
+  else if (event.status === 'done') report(file, downloads.get(file)?.total ?? 0);
+}
+
+async function fetchCached(path) {
   const url = new URL(path, self.location.origin).href;
   const cached = await modelCache.match(url);
   if (cached) {
-    report(path, expectedSize, expectedSize);
+    report(path, manifest[path] ?? 0);
     return cached.arrayBuffer();
   }
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Téléchargement impossible : ${path}`);
-  const total = Number(response.headers.get('content-length')) || expectedSize;
   const reader = response.body.getReader();
   const chunks = [];
   let loaded = 0;
@@ -60,7 +80,7 @@ async function fetchCached(path, expectedSize) {
     if (done) break;
     chunks.push(value);
     loaded += value.length;
-    report(path, loaded, total);
+    report(path, loaded);
   }
   const blob = new Blob(chunks);
   await modelCache.put(url, new Response(blob, { headers: { 'Content-Type': 'application/octet-stream' } }));
@@ -77,46 +97,151 @@ async function webgpuAvailable() {
   }
 }
 
+const STEP_FILES = { webgpu: '/models/pixelgpt/step_gpu.onnx', wasm: '/models/pixelgpt/step.onnx' };
+const CONDITION_FILE = '/models/pixelgpt/condition.onnx';
+const TEXT_FILES = [
+  '/models/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx',
+  '/models/Xenova/opus-mt-fr-en/onnx/encoder_model_uint8.onnx',
+  '/models/Xenova/opus-mt-fr-en/onnx/decoder_model_merged_uint8.onnx'
+];
+
+// WebGPU uses a step graph whose key/value cache never leaves the GPU; the CPU one gets the filled part.
+async function createSessions(backend) {
+  const providers = backend === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'];
+  const gpu = location => (backend === 'webgpu' ? { preferredOutputLocation: location } : {});
+  const [condition, step] = await Promise.all([fetchCached(CONDITION_FILE), fetchCached(STEP_FILES[backend])]);
+  // WebGPU sessions have to be created one after the other.
+  const conditionSession = await ort.InferenceSession.create(condition, {
+    executionProviders: providers, graphOptimizationLevel: 'all', ...gpu({ mods: 'gpu-buffer', mod_out: 'gpu-buffer' })
+  });
+  const stepSession = await ort.InferenceSession.create(step, {
+    executionProviders: providers, graphOptimizationLevel: 'all', ...gpu({ present_k: 'gpu-buffer', present_v: 'gpu-buffer' })
+  });
+  return { backend, condition: conditionSession, step: stepSession };
+}
+
+// Runs the 576 (or fewer) autoregressive steps; chooseToken picks each pixel from the two logit rows.
+async function runSteps(sessions, { caption, paletteTensor, steps, chooseToken, onStep }) {
+  const { mods, mod_out: modOut } = await sessions.condition.run({
+    caption: new ort.Tensor('float32', caption, [BATCH, 384]), palette: paletteTensor
+  });
+  const onGpu = sessions.backend === 'webgpu';
+  const cacheShape = [LAYERS, BATCH, HEADS, SEQ_LEN, HEAD_DIM];
+  if (onGpu) {
+    engineBuffers.keys.fill(0);
+    engineBuffers.values.fill(0);
+  }
+  let cacheK = onGpu ? new ort.Tensor('float32', engineBuffers.keys, cacheShape) : null;
+  let cacheV = onGpu ? new ort.Tensor('float32', engineBuffers.values, cacheShape) : null;
+  let token = SOS;
+  for (let position = 0; position < steps; position++) {
+    const common = {
+      token: new ort.Tensor('int64', BigInt64Array.of(BigInt(token), BigInt(token)), [BATCH, 1]),
+      position: new ort.Tensor('int64', BigInt64Array.of(BigInt(position)), [1]),
+      palette: paletteTensor, mods, mod_out: modOut
+    };
+    let logits;
+    if (onGpu) {
+      const result = await sessions.step.run({ ...common, cache_k: cacheK, cache_v: cacheV });
+      if (position) {
+        cacheK.dispose();
+        cacheV.dispose();
+      }
+      cacheK = result.present_k;
+      cacheV = result.present_v;
+      logits = await result.logits.getData();
+    } else {
+      const past = Math.max(position, 1);
+      const bias = position ? new Float32Array(past) : Float32Array.of(-1e9);
+      const result = await sessions.step.run({
+        ...common,
+        past_k: new ort.Tensor('float32', engineBuffers.keys.subarray(0, past * SLOT), [past, LAYERS, BATCH, HEADS, HEAD_DIM]),
+        past_v: new ort.Tensor('float32', engineBuffers.values.subarray(0, past * SLOT), [past, LAYERS, BATCH, HEADS, HEAD_DIM]),
+        past_bias: new ort.Tensor('float32', bias, [past])
+      });
+      engineBuffers.keys.set(await result.new_k.getData(), position * SLOT);
+      engineBuffers.values.set(await result.new_v.getData(), position * SLOT);
+      logits = await result.logits.getData();
+      for (const output of Object.values(result)) output.dispose?.();
+    }
+    token = chooseToken(Array.from(logits.subarray(0, 5)), Array.from(logits.subarray(5, 10)));
+    onStep?.(position, token);
+  }
+  if (onGpu) {
+    cacheK.dispose();
+    cacheV.dispose();
+  }
+  mods.dispose?.();
+  modOut.dispose?.();
+}
+
+const engineBuffers = { keys: new Float32Array(SEQ_LEN * SLOT), values: new Float32Array(SEQ_LEN * SLOT) };
+
+// Milliseconds per step on this computer, measured on a short run after a warm-up.
+async function measure(sessions) {
+  const caption = new Float32Array(BATCH * 384).fill(.05);
+  const paletteTensor = new ort.Tensor('float32', new Float32Array(BATCH * 15).fill(.5), [BATCH, 5, 3]);
+  let started = 0;
+  await runSteps(sessions, {
+    caption, paletteTensor, steps: 40, chooseToken: () => 1,
+    onStep: position => { if (position === 7) started = performance.now(); }
+  });
+  return (performance.now() - started) / 32;
+}
+
+// Picks the faster of the graphics card and the processor the first time (the choice is then remembered
+// by the page): older integrated GPUs, like Intel UHD 620, are often slower than the CPU for this model.
+async function chooseSessions(preferred) {
+  const gpu = preferred !== 'wasm' && await webgpuAvailable();
+  if (preferred && preferred !== 'auto') {
+    const backend = preferred === 'webgpu' && gpu ? 'webgpu' : 'wasm';
+    plan([CONDITION_FILE, STEP_FILES[backend]]);
+    return { sessions: await createSessions(backend), msPerStep: null };
+  }
+  if (!gpu) {
+    plan([CONDITION_FILE, STEP_FILES.wasm]);
+    const sessions = await createSessions('wasm');
+    postMessage({ type: 'measuring' });
+    return { sessions, msPerStep: await measure(sessions) * 1.3 };
+  }
+  plan([CONDITION_FILE, STEP_FILES.webgpu]);
+  const gpuSessions = await createSessions('webgpu');
+  postMessage({ type: 'measuring' });
+  const gpuSpeed = await measure(gpuSessions);
+  if (gpuSpeed < 15) return { sessions: gpuSessions, msPerStep: gpuSpeed };
+  // The graphics card is slow here: try the processor too (one more 29 MB download, once).
+  plan([STEP_FILES.wasm]);
+  const cpuSessions = await createSessions('wasm');
+  postMessage({ type: 'measuring' });
+  // The CPU graph gets slower as the sequence grows; 1.3 accounts for the average length.
+  const cpuSpeed = await measure(cpuSessions) * 1.3;
+  if (cpuSpeed < gpuSpeed) {
+    await gpuSessions.condition.release();
+    await gpuSessions.step.release();
+    return { sessions: cpuSessions, msPerStep: cpuSpeed };
+  }
+  await cpuSessions.condition.release();
+  await cpuSessions.step.release();
+  return { sessions: gpuSessions, msPerStep: gpuSpeed };
+}
+
 async function load(preferred) {
-  const backend = preferred === 'wasm' || !(await webgpuAvailable()) ? 'wasm' : 'webgpu';
-  // Approximate sizes so the progress bar is right before every download has started.
-  // WebGPU uses a variant whose key/value cache never leaves the GPU; the CPU variant takes the filled part.
-  const stepFile = backend === 'webgpu' ? '/models/pixelgpt/step_gpu.onnx' : '/models/pixelgpt/step.onnx';
-  report(stepFile, 0, 29.3e6);
-  report('/models/pixelgpt/condition.onnx', 0, 14.8e6);
-  report('minilm', 0, 23e6);
-  report('opus', 0, 107e6);
-  const transformersProgress = event => {
-    if (event.status === 'progress' && event.total) report(event.file.includes('opus') ? 'opus' : 'minilm', event.loaded, event.total);
-  };
-  const [scanOrder, marian, condition, step, embed, translator] = await Promise.all([
+  manifest = await fetch('/static/engine/manifest.json').then(r => r.json()).catch(() => ({}));
+  plan(TEXT_FILES);
+  const [scanOrder, marian, nullCaption, embed, translator] = await Promise.all([
     fetch('/models/pixelgpt/scan_order.json').then(r => r.json()),
     fetch('/models/Xenova/opus-mt-fr-en/marian_source.json').then(r => r.json()),
-    fetchCached('/models/pixelgpt/condition.onnx', 14.8e6),
-    fetchCached(stepFile, 29.3e6),
+    fetch('/models/pixelgpt/null_caption.json').then(r => r.json()),
     pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { dtype: 'q8', device: 'wasm', progress_callback: transformersProgress }),
     AutoModelForSeq2SeqLM.from_pretrained('Xenova/opus-mt-fr-en', { dtype: 'uint8', device: 'wasm', progress_callback: transformersProgress })
   ]);
-  const providers = backend === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'];
-  const gpu = location => (backend === 'webgpu' ? { preferredOutputLocation: location } : {});
-  // WebGPU sessions have to be created one after the other.
-  const sessions = [
-    await ort.InferenceSession.create(condition, {
-      executionProviders: providers, graphOptimizationLevel: 'all', ...gpu({ mods: 'gpu-buffer', mod_out: 'gpu-buffer' })
-    }),
-    await ort.InferenceSession.create(step, {
-      executionProviders: providers, graphOptimizationLevel: 'all', ...gpu({ present_k: 'gpu-buffer', present_v: 'gpu-buffer' })
-    })
-  ];
+  TEXT_FILES.forEach(file => report(file, manifest[file] ?? 0));
+  const { sessions, msPerStep } = await chooseSessions(preferred);
   engine = {
-    backend, scanOrder, embed, translator, tokenizer: new MarianTokenizer(marian),
-    condition: sessions[0], step: sessions[1],
-    nullCaption: null, translations: new Map(), embeddings: new Map(),
-    keys: new Float32Array(SEQ_LEN * SLOT), values: new Float32Array(SEQ_LEN * SLOT)
+    backend: sessions.backend, sessions, scanOrder, embed, translator, tokenizer: new MarianTokenizer(marian),
+    nullCaption: Float32Array.from(nullCaption), translations: new Map(), embeddings: new Map()
   };
-  const nullCaption = await fetch('/models/pixelgpt/null_caption.json').then(r => r.json());
-  engine.nullCaption = Float32Array.from(nullCaption);
-  postMessage({ type: 'ready', backend });
+  postMessage({ type: 'ready', backend: sessions.backend, secondsPerSprite: msPerStep ? Math.round(msPerStep * SEQ_LEN / 1000 + 1) : null });
 }
 
 // Small seeded PRNG so a seed reproduces the same sprite.
@@ -179,69 +304,19 @@ async function generate({ id, prompt, palette, temperature, seed }) {
   caption.set(engine.nullCaption, 384);
   const rgb = palette.flat().map(value => value / 255);
   const paletteTensor = new ort.Tensor('float32', Float32Array.from([...rgb, ...rgb]), [BATCH, 5, 3]);
-  const { mods, mod_out: modOut } = await engine.condition.run({
-    caption: new ort.Tensor('float32', caption, [BATCH, 384]), palette: paletteTensor
-  });
   const random = mulberry32(seed);
-  const sequence = new Uint8Array(SEQ_LEN);
   const grid = new Uint8Array(SEQ_LEN);
-  let token = SOS;
-  const onGpu = engine.backend === 'webgpu';
-  const cacheShape = [LAYERS, BATCH, HEADS, SEQ_LEN, HEAD_DIM];
-  let cacheK = onGpu ? new ort.Tensor('float32', engine.keys, cacheShape) : null;
-  let cacheV = onGpu ? new ort.Tensor('float32', engine.values, cacheShape) : null;
-  if (onGpu) {
-    engine.keys.fill(0);
-    engine.values.fill(0);
-  }
-  for (let position = 0; position < SEQ_LEN; position++) {
-    const common = {
-      token: new ort.Tensor('int64', BigInt64Array.of(BigInt(token), BigInt(token)), [BATCH, 1]),
-      position: new ort.Tensor('int64', BigInt64Array.of(BigInt(position)), [1]),
-      palette: paletteTensor, mods, mod_out: modOut
-    };
-    if (onGpu) {
-      const result = await engine.step.run({ ...common, cache_k: cacheK, cache_v: cacheV });
-      if (position) {
-        cacheK.dispose();
-        cacheV.dispose();
-      }
-      cacheK = result.present_k;
-      cacheV = result.present_v;
-      const logits = await result.logits.getData();
-      token = sampleNext(Array.from(logits.subarray(0, 5)), Array.from(logits.subarray(5, 10)), temperature, random);
-      sequence[position] = token;
+  await runSteps(engine.sessions, {
+    caption, paletteTensor, steps: SEQ_LEN,
+    chooseToken: (conditional, unconditional) => sampleNext(conditional, unconditional, temperature, random),
+    onStep: (position, token) => {
       grid[engine.scanOrder[position]] = token;
-      if ((position + 1) % 24 === 0 || position === SEQ_LEN - 1) {
+      // Every 8 pixels: enough for a smooth progress bar without flooding the page.
+      if ((position + 1) % 8 === 0 || position === SEQ_LEN - 1) {
         postMessage({ type: 'progress', id, step: position + 1, tokens: Array.from(grid) });
       }
-      continue;
     }
-    const past = Math.max(position, 1);
-    const bias = position ? new Float32Array(past) : Float32Array.of(-1e9);
-    const result = await engine.step.run({
-      ...common,
-      past_k: new ort.Tensor('float32', engine.keys.subarray(0, past * SLOT), [past, LAYERS, BATCH, HEADS, HEAD_DIM]),
-      past_v: new ort.Tensor('float32', engine.values.subarray(0, past * SLOT), [past, LAYERS, BATCH, HEADS, HEAD_DIM]),
-      past_bias: new ort.Tensor('float32', bias, [past])
-    });
-    engine.keys.set(await result.new_k.getData(), position * SLOT);
-    engine.values.set(await result.new_v.getData(), position * SLOT);
-    const logits = await result.logits.getData();
-    token = sampleNext(Array.from(logits.subarray(0, 5)), Array.from(logits.subarray(5, 10)), temperature, random);
-    sequence[position] = token;
-    grid[engine.scanOrder[position]] = token;
-    for (const output of Object.values(result)) output.dispose?.();
-    if ((position + 1) % 24 === 0 || position === SEQ_LEN - 1) {
-      postMessage({ type: 'progress', id, step: position + 1, tokens: Array.from(grid) });
-    }
-  }
-  if (onGpu) {
-    cacheK.dispose();
-    cacheV.dispose();
-  }
-  mods.dispose?.();
-  modOut.dispose?.();
+  });
   postMessage({ type: 'done', id, english, tokens: Array.from(grid), ms: Math.round(performance.now() - started) });
 }
 
@@ -252,13 +327,17 @@ let vision = null;
 
 async function loadVision() {
   if (vision) return vision;
-  const files = new Map();
+  const files = new Map(Object.entries(manifest).filter(([file]) => file.includes(VISION_MODEL)).map(([file, size]) => [file, { loaded: 0, total: size }]));
+  const total = [...files.values()].reduce((sum, file) => sum + file.total, 0);
   const progress_callback = event => {
-    if (event.status !== 'progress' || !event.total) return;
-    files.set(event.file, { loaded: event.loaded, total: event.total });
+    const entry = files.get(`/models/${event.name}/${event.file}`);
+    if (!entry) return;
+    if (event.status === 'progress' && event.loaded != null) entry.loaded = event.loaded;
+    else if (event.status === 'done') entry.loaded = entry.total;
+    else return;
     let loaded = 0;
-    for (const file of files.values()) loaded += file.loaded;
-    postMessage({ type: 'vision-loading', loaded, total: Math.max(208e6, [...files.values()].reduce((sum, f) => sum + f.total, 0)) });
+    for (const file of files.values()) loaded += Math.min(file.loaded, file.total);
+    postMessage({ type: 'vision-loading', loaded, total });
   };
   const [model, processor] = await Promise.all([
     Florence2ForConditionalGeneration.from_pretrained(VISION_MODEL, {
