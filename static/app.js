@@ -1821,9 +1821,26 @@ const converterSubjectInput = document.querySelector('#converterSubjectInput');
 const converterResults = document.querySelector('#converterResults');
 let conversion = null;
 
+const CONVERTER_INTRO = 'L’IA regarde l’image, la décrit, puis vous propose trois façons d’en faire une vignette.';
+
+// Back to the empty state: no image, no proposals, running generations stop after the current one.
+function resetConverter() {
+  if (conversion) conversion.cancelled = true;
+  conversion = null;
+  converterFile.value = '';
+  converterPreview.hidden = true;
+  converterPreview.removeAttribute('src');
+  document.querySelector('#converterDropText').hidden = false;
+  document.querySelector('#converterImageActions').hidden = true;
+  converterSubject.hidden = true;
+  converterResults.replaceChildren();
+  converterStatus.textContent = CONVERTER_INTRO;
+}
+
 function openConverter() {
+  resetConverter();
   converter.hidden = false;
-  if (!conversion) converterFile.click();
+  converterFile.click();
 }
 
 function closeConverter() {
@@ -2038,6 +2055,8 @@ async function convertImage(file) {
   converterPreview.src = source.toDataURL('image/jpeg', .85);
   converterPreview.hidden = false;
   document.querySelector('#converterDropText').hidden = true;
+  document.querySelector('#converterImageActions').hidden = false;
+  converterFile.value = '';
   const run = { source, cancelled: false };
   conversion = run;
   converterResults.replaceChildren();
@@ -2083,6 +2102,8 @@ converterSubject.addEventListener('submit', event => {
   buildProposals(conversion, subject);
 });
 document.querySelector('#importImageButton').addEventListener('click', openConverter);
+document.querySelector('#converterOther').addEventListener('click', () => converterFile.click());
+document.querySelector('#converterReset').addEventListener('click', resetConverter);
 document.querySelectorAll('[data-close-converter]').forEach(button => button.addEventListener('click', closeConverter));
 converter.addEventListener('click', event => {
   if (event.target === converter) closeConverter();

@@ -292,12 +292,18 @@
         <button class="ia-icon-btn" type="button" data-close-converter aria-label="Fermer">×</button>
       </div>
       <div class="converter-body">
-        <label id="converterDrop" class="converter-drop">
-          <input id="converterFile" type="file" accept="image/*" hidden>
-          <img id="converterPreview" alt="" hidden>
-          <span id="converterDropText"><strong>Choisissez une image</strong> ou glissez-la ici<br>
-            <small>photo, dessin, logo… Elle reste sur cet ordinateur.</small></span>
-        </label>
+        <div class="converter-image">
+          <label id="converterDrop" class="converter-drop">
+            <input id="converterFile" type="file" accept="image/*" hidden>
+            <img id="converterPreview" alt="Image choisie" hidden>
+            <span id="converterDropText"><strong>Choisissez une image</strong> ou glissez-la ici<br>
+              <small>photo, dessin, logo… Elle reste sur cet ordinateur.</small></span>
+          </label>
+          <div id="converterImageActions" class="converter-image-actions" hidden>
+            <button id="converterOther" class="ia-btn ia-btn--outline ia-btn--sm" type="button">Choisir une autre image</button>
+            <button id="converterReset" class="ia-btn ia-btn--ghost ia-btn--sm" type="button">Recommencer</button>
+          </div>
+        </div>
         <div class="converter-side">
           <p id="converterStatus" class="converter-status" role="status" aria-live="polite">
             L'IA regarde l'image, la décrit, puis vous propose trois façons d'en faire une vignette.</p>

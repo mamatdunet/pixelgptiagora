@@ -190,6 +190,8 @@ input[type="range"] { width: 100%; accent-color: var(--blue-600); }
 .converter-drop:hover, .converter-drop.dragging { border-color: var(--blue-600); background: var(--blue-50); }
 .converter-drop img { max-width: 100%; max-height: 240px; border-radius: var(--radius-md); }
 .converter-drop small { color: var(--ink-500); }
+.converter-image { display: grid; gap: 8px; }
+.converter-image-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .converter-side { display: grid; gap: 12px; }
 .converter-status { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-700); }
 .converter-subject { display: grid; gap: 8px; justify-items: start; }
