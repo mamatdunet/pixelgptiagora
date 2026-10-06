@@ -432,7 +432,12 @@ function drawGenerationProgress(item) {
     } else if (PixelEngine.secondsPerSprite) {
       seconds = PixelEngine.secondsPerSprite * (1 - step / 576);
     }
-    label = `${Math.round(step / 5.76)} %${seconds != null ? ` · encore ${Math.max(1, Math.round(seconds))} s` : ''}`;
+    // The time left only changes every 5 seconds: a figure that flickers several times a second is unreadable.
+    const now = performance.now();
+    const shown = item.generation.shownTime;
+    if (seconds != null && (!shown || now - shown.at >= 5000)) item.generation.shownTime = { seconds, at: now };
+    const remaining = item.generation.shownTime?.seconds;
+    label = `${Math.round(step / 5.76)} %${remaining != null ? ` · encore ${Math.max(1, Math.round(remaining))} s` : ''}`;
   }
   ctx.font = '600 11px Heebo, Arial, sans-serif';
   ctx.textBaseline = 'bottom';
@@ -492,6 +497,34 @@ function rgbToHex(rgb) {
 
 function hexToRgb(hex) {
   return [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
+}
+
+// WCAG contrast ratio between two colours given as [r, g, b].
+function contrastRatio(a, b) {
+  const relative = rgb => {
+    const [r, g, bl] = rgb.map(value => {
+      const channel = value / 255;
+      return channel <= .03928 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+    });
+    return .2126 * r + .7152 * g + .0722 * bl;
+  };
+  const [light, dark] = [relative(a), relative(b)].sort((x, y) => y - x);
+  return (light + .05) / (dark + .05);
+}
+
+// A random palette whose main colour (n° 1) stands out from the card background, by lightness or by hue.
+async function paletteVisibleOn(backgroundHex) {
+  const background = hexToRgb(backgroundHex);
+  let best = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const palette = await PixelEngine.randomPalette();
+    const main = palette[1];
+    const score = Math.max(contrastRatio(main, background) / 1.8,
+      Math.hypot(main[0] - background[0], main[1] - background[1], main[2] - background[2]) / 160);
+    if (score >= 1) return palette;
+    if (!best || score > best.score) best = { palette, score };
+  }
+  return best.palette;
 }
 
 function luminance(hex) {
@@ -753,6 +786,7 @@ async function generateSprite(prompt, existing = null) {
   try {
     const payload = { prompt, temperature: Number(temperatureInput.value) };
     if (existing) payload.palette = existing.palette.map(hexToRgb);
+    else payload.palette = await paletteVisibleOn(cardBackground);
     if (!engineReady) status.textContent = 'Le modèle d’IA finit de se charger, la création démarre dès qu’il est prêt…';
     await PixelEngine.generate(payload, data => {
       if (data.type === 'start') {
@@ -964,7 +998,7 @@ randomPaletteButton.addEventListener('click', async () => {
   const before = captureState();
   randomPaletteButton.disabled = true;
   try {
-    const data = { palette: await PixelEngine.randomPalette() };
+    const data = { palette: await paletteVisibleOn(cardBackground) };
     selection.forEach(sprite => {
       sprite.palette = data.palette.map(rgbToHex);
       sprite.bitmapDirty = true;
