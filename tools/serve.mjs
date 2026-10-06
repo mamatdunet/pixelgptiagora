@@ -6,7 +6,7 @@ import { extname, join, normalize } from 'node:path';
 
 const ROOT = normalize(join(import.meta.dirname, '..'));
 const PORT = Number(process.env.PORT || 8080);
-const GALLERY = process.env.ATELIER_GALLERY || 'https://pixelgpt-iagora.vercel.app';
+const GALLERY = process.env.ATELIER_GALLERY || 'https://cartes-iagora.vercel.app';
 // The isolation headers enable multi-threaded WebAssembly; some embedded browsers refuse such pages, so
 // ATELIER_ISOLATION=0 turns them off (WebGPU still works, the CPU fallback then uses a single thread).
 const ISOLATION = process.env.ATELIER_ISOLATION !== '0'

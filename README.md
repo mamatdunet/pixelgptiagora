@@ -1,7 +1,7 @@
 # Atelier pixel art IAgora
 
 **Composez une carte postale en pixel art avec une IA qui tourne dans votre navigateur.**
-Site en ligne : https://pixelgpt-iagora.vercel.app · Galerie collective : https://pixelgpt-iagora.vercel.app/galerie
+Site en ligne : https://cartes-iagora.vercel.app · Galerie collective : https://cartes-iagora.vercel.app/galerie
 
 Décrivez un objet en français (« chouette des neiges », « épée en fer »), un petit modèle d'IA le dessine
 pixel par pixel en 24 × 24, puis assemblez vignettes et textes WordArt sur une carte postale 15 × 10 cm
