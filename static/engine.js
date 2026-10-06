@@ -9,10 +9,12 @@ const PixelEngine = (() => {
   let readyReject;
   const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
   let loadingListener = () => {};
+  let visionListener = () => {};
   let backend = null;
 
   worker.addEventListener('message', ({ data }) => {
     if (data.type === 'loading') loadingListener(data.loaded, data.total);
+    else if (data.type === 'vision-loading') visionListener(data.loaded, data.total);
     else if (data.type === 'ready') {
       backend = data.backend;
       readyResolve(data.backend);
@@ -47,6 +49,21 @@ const PixelEngine = (() => {
     },
     randomPalette() {
       return paletteAt(randomSeed());
+    },
+    // Describe an image (RGBA pixels): a short English caption and the detected objects with their boxes.
+    async describe(imageData, onLoading = () => {}) {
+      await ready;
+      visionListener = onLoading;
+      const id = nextRequest++;
+      return new Promise((resolve, reject) => {
+        pending.set(id, message => {
+          pending.delete(id);
+          if (message.type === 'described') resolve({ caption: message.caption, objects: message.objects });
+          else reject(new Error(message.message));
+        });
+        const data = imageData.data.buffer.slice(0);
+        worker.postMessage({ type: 'describe', id, width: imageData.width, height: imageData.height, data }, [data]);
+      });
     },
     async generate({ prompt, temperature = 1, palette = null, seed = randomSeed() }, onEvent) {
       await ready;

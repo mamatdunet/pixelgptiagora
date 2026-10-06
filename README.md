@@ -32,6 +32,7 @@ compositions d'exemple, export 300 dpi, impression) et la galerie collective.
 | Cartes d'exemple (onglet Compositions) | composées pour l'atelier IAgora, vignettes générées par le modèle ou dessinées à la main | — |
 | Palettes de couleurs | jeu d'entraînement PixelGPT, unstonio | voir ci-dessus |
 | Traduction français → anglais | [opus-mt-fr-en](https://huggingface.co/Helsinki-NLP/opus-mt-fr-en), Helsinki-NLP ; version ONNX [Xenova](https://huggingface.co/Xenova/opus-mt-fr-en) | CC BY 4.0 |
+| Lecture des images importées | [Florence-2-base-ft](https://huggingface.co/microsoft/Florence-2-base-ft), Microsoft ; version ONNX [onnx-community](https://huggingface.co/onnx-community/Florence-2-base-ft) | MIT |
 | Compréhension du texte | [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2), sentence-transformers ; version ONNX Xenova | Apache 2.0 |
 | Moteur dans le navigateur | [ONNX Runtime Web](https://onnxruntime.ai) (Microsoft), [Transformers.js](https://github.com/huggingface/transformers.js) (Hugging Face) | MIT, Apache 2.0 |
 | Polices | Anton, Heebo, Press Start 2P, Bangers, Lobster, Pacifico | SIL Open Font License |
@@ -49,6 +50,11 @@ compositions d'exemple, export 300 dpi, impression) et la galerie collective.
 - **Galerie collective** : « Publier » envoie la carte (PNG) à `api/creations.js`, stockée dans
   Vercel Blob. Supprimer une carte demande le mot de passe de l'atelier (seule son empreinte SHA-256
   est dans le code ; la variable `DELETE_PASSWORD` le remplace).
+
+- **Transformer une image** (« + Image ») : Florence-2 décrit l'image et repère son sujet, dans le navigateur
+  (environ 210 Mo téléchargés la première fois qu'on l'utilise). L'atelier propose alors la vignette dessinée à
+  la main qui correspond, trois interprétations par PixelGPT dans les couleurs de l'image, et une version
+  pixelisée (recadrée sur le sujet, fond retiré, 4 couleurs). Le sujet reste modifiable avant de relancer.
 
 ## Organisation du dépôt
 

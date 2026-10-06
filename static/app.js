@@ -1553,6 +1553,10 @@ function isTypingField(element) {
 }
 
 document.addEventListener('keydown', event => {
+  if (!converter.hidden) {
+    if (event.key === 'Escape') closeConverter();
+    return;
+  }
   if (!pixelEditor.hidden) {
     if (event.key === 'Escape') closePixelEditor(false);
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
@@ -1800,6 +1804,288 @@ document.querySelector('#addDrawingButton').addEventListener('click', () => {
   selectedIds.add(sprite.id);
   primaryId = sprite.id;
   openPixelEditor(sprite, { isNew: true, before });
+});
+
+// --- Image converter: an imported picture becomes a vignette in three ways.
+//   1. a hand-drawn vignette of our collection when the picture shows one of its subjects,
+//   2. PixelGPT's interpretation of what the vision model sees, in the picture's own colours,
+//   3. a direct pixelisation (crop on the main object, 24 x 24, background removed, 4 colours).
+
+const converter = document.querySelector('#converter');
+const converterFile = document.querySelector('#converterFile');
+const converterDrop = document.querySelector('#converterDrop');
+const converterPreview = document.querySelector('#converterPreview');
+const converterStatus = document.querySelector('#converterStatus');
+const converterSubject = document.querySelector('#converterSubject');
+const converterSubjectInput = document.querySelector('#converterSubjectInput');
+const converterResults = document.querySelector('#converterResults');
+let conversion = null;
+
+function openConverter() {
+  converter.hidden = false;
+  if (!conversion) converterFile.click();
+}
+
+function closeConverter() {
+  converter.hidden = true;
+  if (conversion) conversion.cancelled = true;
+}
+
+// "A very tall Eiffel tower towering over a city." -> "eiffel tower"
+function captionSubject(caption) {
+  return caption.toLowerCase().replace(/\.$/, '')
+    .replace(/^(a|an|the|two|three|some)\s+/, '')
+    .split(/\s+(?:on|in|over|with|is|are|sitting|standing|looking|towering|shown|lying|flying|next|that|which|of a)\s+/)[0]
+    .replace(/^(?:very\s+)?(?:tall|big|large|small|little|close up of a|close up of an|picture of a|drawing of a)\s+/, '')
+    .trim();
+}
+
+function mainObjectBox(objects, width, height) {
+  const boxes = objects.map(object => object.box).filter(box => (box[2] - box[0]) * (box[3] - box[1]) > width * height * .04);
+  if (!boxes.length) return [0, 0, width, height];
+  return boxes.reduce((best, box) => ((box[2] - box[0]) * (box[3] - box[1]) > (best[2] - best[0]) * (best[3] - best[1]) ? box : best));
+}
+
+function toHex(rgb) {
+  return `#${rgb.map(value => Math.round(value).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// Crop on the main object, shrink to 24 x 24, drop the background (the colour of the borders) and keep 4 colours.
+function pixelise(source, box, { step: maxStep = 18, reach = 90 } = {}) {
+  const [x0, y0, x1, y1] = box;
+  const pad = Math.max(x1 - x0, y1 - y0) * .06;
+  const side = Math.max(x1 - x0, y1 - y0) + pad * 2;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  let step = document.createElement('canvas');
+  step.width = step.height = 192;
+  let stepContext = step.getContext('2d');
+  stepContext.imageSmoothingQuality = 'high';
+  stepContext.drawImage(source, cx - side / 2, cy - side / 2, side, side, 0, 0, 192, 192);
+  for (const size of [96, 48, 24]) {
+    const next = document.createElement('canvas');
+    next.width = next.height = size;
+    const nextContext = next.getContext('2d');
+    nextContext.imageSmoothingQuality = 'high';
+    nextContext.drawImage(step, 0, 0, size, size);
+    step = next;
+    stepContext = nextContext;
+  }
+  const data = stepContext.getImageData(0, 0, 24, 24).data;
+  const pixels = Array.from({ length: 576 }, (_, index) => [data[index * 4], data[index * 4 + 1], data[index * 4 + 2], data[index * 4 + 3]]);
+  // Only visible pixels count: the square crop can go past the picture's edges (transparent there).
+  const onEdge = index => index < 24 || index >= 552 || index % 24 === 0 || index % 24 === 23 ||
+    (pixels[index][3] > 64 && [index - 1, index + 1, index - 24, index + 24].some(n => pixels[n]?.[3] <= 64));
+  let border = pixels.filter((pixel, index) => onEdge(index) && pixel[3] > 64);
+  if (!border.length) border = pixels.filter(pixel => pixel[3] > 64);
+  const median = channel => border.map(pixel => pixel[channel]).sort((a, b) => a - b)[Math.floor(border.length / 2)];
+  const background = [median(0), median(1), median(2)];
+  const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  // Background = everything reachable from the borders through small colour steps (follows sky gradients).
+  const isBackground = new Array(576).fill(false);
+  const stack = [];
+  pixels.forEach((pixel, index) => {
+    if (pixel[3] <= 64 || (onEdge(index) && distance(pixel, background) < 90)) {
+      isBackground[index] = true;
+      stack.push(index);
+    }
+  });
+  while (stack.length) {
+    const index = stack.pop();
+    const x = index % 24;
+    for (const neighbour of [x > 0 ? index - 1 : -1, x < 23 ? index + 1 : -1, index - 24, index + 24]) {
+      if (neighbour < 0 || neighbour >= 576 || isBackground[neighbour]) continue;
+      const pixel = pixels[neighbour];
+      if (pixel[3] < 64 || (distance(pixel, pixels[index]) < maxStep && distance(pixel, background) < reach)) {
+        isBackground[neighbour] = true;
+        stack.push(neighbour);
+      }
+    }
+  }
+  let foreground = pixels.map((pixel, index) => pixel[3] > 64 && !isBackground[index]);
+  if (foreground.filter(Boolean).length < 30) foreground = pixels.map(pixel => pixel[3] > 64);
+  const kept = pixels.filter((_, index) => foreground[index]);
+  // k-means with 4 colours, started from luminance quantiles so the result is stable.
+  const luminanceOf = pixel => .2126 * pixel[0] + .7152 * pixel[1] + .0722 * pixel[2];
+  const sorted = [...kept].sort((a, b) => luminanceOf(a) - luminanceOf(b));
+  const k = Math.min(4, sorted.length);
+  let centers = Array.from({ length: k }, (_, index) => sorted[Math.floor((index + .5) * sorted.length / k)].slice(0, 3));
+  let labels = [];
+  for (let iteration = 0; iteration < 10; iteration++) {
+    labels = kept.map(pixel => centers.reduce((best, center, index) => (distance(pixel, center) < distance(pixel, centers[best]) ? index : best), 0));
+    centers = centers.map((center, index) => {
+      const members = kept.filter((_, member) => labels[member] === index);
+      return members.length ? [0, 1, 2].map(channel => members.reduce((sum, pixel) => sum + pixel[channel], 0) / members.length) : center;
+    });
+  }
+  const order = centers.map((_, index) => index).sort((a, b) => luminanceOf(centers[a]) - luminanceOf(centers[b]));
+  const rank = new Map(order.map((index, position) => [index, position + 1]));
+  const tokens = new Array(576).fill(0);
+  let next = 0;
+  foreground.forEach((isForeground, index) => {
+    if (isForeground) tokens[index] = rank.get(labels[next++]);
+  });
+  const colours = order.map(index => centers[index]);
+  while (colours.length < 4) colours.push(colours.at(-1) ?? [20, 20, 26]);
+  // PixelGPT paints the background with palette colour 0, which is dark in its training data: giving it a dark
+  // neutral there keeps generated vignettes on a transparent background whatever the photo's backdrop.
+  return {
+    tokens, palette: [toHex(background), ...colours.map(toHex)],
+    rgb: [[18, 18, 20], ...colours.map(rgb => rgb.map(Math.round))]
+  };
+}
+
+function converterTile(label, tokens, palette, onPick, pending = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'converter-choice';
+  button.disabled = pending;
+  const tile = document.createElement('canvas');
+  tile.width = tile.height = 24;
+  if (tokens) paintTokens(tile, tokens, palette)(0, 0, 1);
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  button.append(tile, caption);
+  button.addEventListener('click', onPick);
+  return button;
+}
+
+function converterGroup(title, note) {
+  const group = document.createElement('section');
+  group.className = 'converter-group';
+  const heading = document.createElement('h3');
+  heading.innerHTML = `${escapeHTML(title)} <small>${escapeHTML(note)}</small>`;
+  const choices = document.createElement('div');
+  choices.className = 'converter-choices';
+  group.append(heading, choices);
+  converterResults.append(group);
+  return choices;
+}
+
+function pickConverted(sprite) {
+  if (conversion) conversion.cancelled = true;
+  converter.hidden = true;
+  addSprite(sprite);
+  status.textContent = `Image transformée en vignette : ${sprite.name}. Retouchez-la au crayon si besoin.`;
+}
+
+async function buildProposals(run, subject) {
+  converterResults.replaceChildren();
+  await loadLibraryData();
+  const words = normalizeSearch(`${run.caption} ${subject}`);
+  const matches = libraryData.sprites.filter(entry => entry[5] && (
+    words.includes(normalizeSearch(entry[2])) || normalizeSearch(subject).includes(normalizeSearch(entry[1]))));
+  if (matches.length) {
+    const choices = converterGroup('Dans notre collection', 'vignettes dessinées à la main');
+    matches.forEach(([, name, english, paletteHex, tokenString]) => {
+      const palette = paletteHex.match(/.{6}/g).map(hex => `#${hex}`);
+      const tokens = tokensFromString(tokenString);
+      choices.append(converterTile(name, tokens, palette, () => pickConverted({ name, prompt: null, tokens, palette, handmade: true })));
+    });
+  }
+  const pixelised = run.pixelised;
+  const aiChoices = converterGroup('Interprétée par l’IA', `PixelGPT dessine « ${subject} » avec les couleurs de l’image`);
+  const directChoices = converterGroup('Pixelisée', 'l’image elle-même, réduite à 24 × 24 pixels et 4 couleurs');
+  directChoices.append(converterTile('pixelisée', pixelised.tokens, pixelised.palette, () => pickConverted({
+    name: `image : ${subject}`, prompt: null, tokens: [...pixelised.tokens], palette: [...pixelised.palette], handmade: true
+  })));
+  const tiles = [1, 2, 3].map(index => {
+    const tile = converterTile(`proposition ${index}`, null, pixelised.palette, () => {}, true);
+    aiChoices.append(tile);
+    return tile;
+  });
+  for (const [index, tile] of tiles.entries()) {
+    if (run.cancelled) return;
+    const canvasTile = tile.querySelector('canvas');
+    let tokens = null;
+    try {
+      await PixelEngine.generate({ prompt: subject, palette: pixelised.rgb, temperature: .9, seed: 1000 + index * 7919 + Math.floor(Math.random() * 7919) }, event => {
+        if (event.type === 'progress' || event.type === 'done') {
+          tokens = event.tokens;
+          const context = canvasTile.getContext('2d');
+          context.clearRect(0, 0, 24, 24);
+          paintTokens(canvasTile, tokens, pixelised.palette)(0, 0, 1);
+        }
+      });
+    } catch (error) {
+      tile.querySelector('span').textContent = 'échec';
+      continue;
+    }
+    if (run.cancelled) return;
+    const finalTokens = [...tokens];
+    tile.disabled = false;
+    tile.addEventListener('click', () => pickConverted({
+      name: subject, prompt: subject, tokens: finalTokens, palette: [...pixelised.palette]
+    }));
+  }
+}
+
+async function convertImage(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    converterStatus.textContent = 'Ce fichier n’est pas une image.';
+    return;
+  }
+  if (conversion) conversion.cancelled = true;
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 768 / Math.max(bitmap.width, bitmap.height));
+  const source = document.createElement('canvas');
+  source.width = Math.max(1, Math.round(bitmap.width * scale));
+  source.height = Math.max(1, Math.round(bitmap.height * scale));
+  const sourceContext = source.getContext('2d');
+  sourceContext.fillStyle = '#ffffff';
+  sourceContext.fillRect(0, 0, source.width, source.height);
+  sourceContext.drawImage(bitmap, 0, 0, source.width, source.height);
+  converterPreview.src = source.toDataURL('image/jpeg', .85);
+  converterPreview.hidden = false;
+  document.querySelector('#converterDropText').hidden = true;
+  const run = { source, cancelled: false };
+  conversion = run;
+  converterResults.replaceChildren();
+  converterSubject.hidden = true;
+  converterStatus.textContent = 'L’IA regarde l’image…';
+  try {
+    const imageData = sourceContext.getImageData(0, 0, source.width, source.height);
+    const { caption, objects } = await PixelEngine.describe(imageData, (loaded, total) => {
+      if (run === conversion) {
+        converterStatus.textContent = `Première fois : téléchargement de l’IA qui lit les images, ${formatMegabytes(loaded)} / ${formatMegabytes(total)} (une seule fois sur cet ordinateur)…`;
+      }
+    });
+    if (run.cancelled) return;
+    run.caption = caption;
+    run.pixelised = pixelise(source, mainObjectBox(objects, source.width, source.height));
+    const subject = captionSubject(caption) || objects[0]?.label || 'object';
+    converterStatus.innerHTML = `L’IA voit : « ${escapeHTML(caption)} »`;
+    converterSubjectInput.value = subject;
+    converterSubject.hidden = false;
+    await buildProposals(run, subject);
+  } catch (error) {
+    if (run === conversion) converterStatus.textContent = `Impossible d’analyser l’image : ${error.message}`;
+  }
+}
+
+converterFile.addEventListener('change', () => convertImage(converterFile.files[0]));
+converterDrop.addEventListener('dragover', event => {
+  event.preventDefault();
+  converterDrop.classList.add('dragging');
+});
+converterDrop.addEventListener('dragleave', () => converterDrop.classList.remove('dragging'));
+converterDrop.addEventListener('drop', event => {
+  event.preventDefault();
+  converterDrop.classList.remove('dragging');
+  convertImage(event.dataTransfer.files[0]);
+});
+converterSubject.addEventListener('submit', event => {
+  event.preventDefault();
+  const subject = converterSubjectInput.value.trim();
+  if (!subject || !conversion?.pixelised) return;
+  conversion.cancelled = true;
+  conversion = { ...conversion, cancelled: false };
+  buildProposals(conversion, subject);
+});
+document.querySelector('#importImageButton').addEventListener('click', openConverter);
+document.querySelectorAll('[data-close-converter]').forEach(button => button.addEventListener('click', closeConverter));
+converter.addEventListener('click', event => {
+  if (event.target === converter) closeConverter();
 });
 
 // --- In-browser model

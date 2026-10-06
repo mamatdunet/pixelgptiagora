@@ -1,6 +1,6 @@
 // In-browser PixelGPT engine (runs in a Web Worker). Translates the prompt, embeds it with MiniLM and
 // samples the 576 pixels with the PixelGPT 24x24 generator by unstonio, converted to ONNX.
-import { AutoModelForSeq2SeqLM, env, pipeline } from '@huggingface/transformers';
+import { AutoModelForSeq2SeqLM, AutoProcessor, Florence2ForConditionalGeneration, RawImage, env, pipeline } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-web/webgpu';
 import { MarianTokenizer } from './marian.js';
 import { translateFrench } from './translate.js';
@@ -245,10 +245,55 @@ async function generate({ id, prompt, palette, temperature, seed }) {
   postMessage({ type: 'done', id, english, tokens: Array.from(grid), ms: Math.round(performance.now() - started) });
 }
 
+// --- Image converter: Florence-2 (Microsoft, MIT) describes a picture and finds its main object.
+// Loaded only the first time someone imports an image (about 210 MB, then cached like the other models).
+const VISION_MODEL = 'onnx-community/Florence-2-base-ft';
+let vision = null;
+
+async function loadVision() {
+  if (vision) return vision;
+  const files = new Map();
+  const progress_callback = event => {
+    if (event.status !== 'progress' || !event.total) return;
+    files.set(event.file, { loaded: event.loaded, total: event.total });
+    let loaded = 0;
+    for (const file of files.values()) loaded += file.loaded;
+    postMessage({ type: 'vision-loading', loaded, total: Math.max(208e6, [...files.values()].reduce((sum, f) => sum + f.total, 0)) });
+  };
+  const [model, processor] = await Promise.all([
+    Florence2ForConditionalGeneration.from_pretrained(VISION_MODEL, {
+      dtype: { vision_encoder: 'q4', embed_tokens: 'q8', encoder_model: 'q4', decoder_model_merged: 'q4' },
+      device: 'wasm', progress_callback
+    }),
+    AutoProcessor.from_pretrained(VISION_MODEL)
+  ]);
+  vision = { model, processor };
+  return vision;
+}
+
+async function runVisionTask(image, task) {
+  const { model, processor } = vision;
+  const inputs = await processor(image, processor.construct_prompts(task));
+  const ids = await model.generate({ ...inputs, max_new_tokens: 48, num_beams: 1 });
+  const text = processor.batch_decode(ids, { skip_special_tokens: false })[0];
+  return processor.post_process_generation(text, task, image.size)[task];
+}
+
+async function describe({ id, width, height, data }) {
+  await loadVision();
+  const image = new RawImage(new Uint8ClampedArray(data), width, height, 4).rgb();
+  const caption = await runVisionTask(image, '<CAPTION>');
+  const detection = await runVisionTask(image, '<OD>');
+  const objects = (detection?.labels ?? []).map((label, index) => ({ label, box: detection.bboxes[index] }));
+  postMessage({ type: 'described', id, caption: String(caption ?? '').trim(), objects });
+}
+
 let queue = Promise.resolve();
 self.addEventListener('message', ({ data }) => {
   if (data.type === 'load') {
     queue = queue.then(() => load(data.backend)).catch(error => postMessage({ type: 'error', message: error.message }));
+  } else if (data.type === 'describe') {
+    queue = queue.then(() => describe(data)).catch(error => postMessage({ type: 'error', id: data.id, message: error.message }));
   } else if (data.type === 'generate') {
     queue = queue.then(() => generate(data)).catch(error => postMessage({ type: 'error', id: data.id, message: error.message }));
   }

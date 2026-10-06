@@ -213,6 +213,7 @@
           <li>★ <strong>Traduction français → anglais</strong> : opus-mt-fr-en, Helsinki-NLP (université d'Helsinki), licence CC BY 4.0,
             version ONNX de Xenova.</li>
           <li>★ <strong>Compréhension du texte</strong> : all-MiniLM-L6-v2, sentence-transformers, licence Apache 2.0.</li>
+          <li>★ <strong>Lecture des images importées</strong> : Florence-2 (Microsoft), licence MIT, version ONNX de la communauté Hugging Face.</li>
           <li>★ <strong>Moteur dans le navigateur</strong> : ONNX Runtime Web (Microsoft, MIT) et Transformers.js (Hugging Face, Apache 2.0).</li>
           <li>★ <strong>Polices</strong> : Anton, Heebo, Press Start 2P, Bangers, Lobster, Pacifico (SIL Open Font License).</li>
         </ul>
@@ -237,6 +238,9 @@
             mêmes résultats qu'à l'origine. Rien à installer : on ouvre le site, c'est tout.</li>
           <li>★ <strong>Dessiner à la main</strong> ce que l'IA ne sait pas faire (tour Eiffel, croissant, baguette…) et
             permettre à chacun·e de retoucher une vignette au crayon : l'IA propose, l'humain corrige.</li>
+          <li>★ <strong>Transformer une image</strong> : une seconde IA regarde la photo ou le dessin importé, le décrit et
+            repère son sujet ; l'atelier propose alors une version pixelisée, des interprétations par PixelGPT dans les
+            couleurs de l'image, ou la vignette de notre collection qui correspond.</li>
         </ul>
         <p class="about-foot">Atelier pixel art IAgora · code source :
           <a href="https://github.com/mamatdunet/pixelgptiagora" target="_blank" rel="noopener">github.com/mamatdunet/pixelgptiagora</a></p>
@@ -280,6 +284,35 @@
     </div>
   </div>
 
+
+  <div id="converter" class="modal" role="dialog" aria-modal="true" aria-labelledby="converterTitle" hidden>
+    <div class="modal-window ia-card converter-window">
+      <div class="panel-heading">
+        <span id="converterTitle" class="ia-heading">Transformer une image en vignette.</span>
+        <button class="ia-icon-btn" type="button" data-close-converter aria-label="Fermer">×</button>
+      </div>
+      <div class="converter-body">
+        <label id="converterDrop" class="converter-drop">
+          <input id="converterFile" type="file" accept="image/*" hidden>
+          <img id="converterPreview" alt="" hidden>
+          <span id="converterDropText"><strong>Choisissez une image</strong> ou glissez-la ici<br>
+            <small>photo, dessin, logo… Elle reste sur cet ordinateur.</small></span>
+        </label>
+        <div class="converter-side">
+          <p id="converterStatus" class="converter-status" role="status" aria-live="polite">
+            L'IA regarde l'image, la décrit, puis vous propose trois façons d'en faire une vignette.</p>
+          <form id="converterSubject" class="converter-subject" hidden>
+            <label class="ia-field">Sujet à dessiner (corrigez-le si besoin, en français ou en anglais)
+              <input id="converterSubjectInput" class="ia-input" maxlength="80">
+            </label>
+            <button class="ia-btn ia-btn--outline ia-btn--sm" type="submit">Relancer les propositions</button>
+          </form>
+        </div>
+      </div>
+      <div id="converterResults" class="converter-results"></div>
+    </div>
+  </div>
+
   <div id="printSheet" aria-hidden="true"><img id="printImage" alt=""></div>
 
   <div class="creation-bar">
@@ -291,6 +324,7 @@
       <button id="libraryButton" class="ia-btn ia-btn--outline" type="button">Bibliothèque</button>
       <button id="addTextButton" class="ia-btn ia-btn--outline" type="button">+ Texte</button>
       <button id="addDrawingButton" class="ia-btn ia-btn--outline" type="button">+ Dessin</button>
+      <button id="importImageButton" class="ia-btn ia-btn--outline" type="button">+ Image</button>
     </div>
     <form id="promptForm" autocomplete="off">
       <label class="sr-only" for="prompt">Décrire une vignette</label>
