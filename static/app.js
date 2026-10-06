@@ -1363,6 +1363,7 @@ function showLibraryTab(tab) {
   libraryGrid.replaceChildren();
   libraryGrid.scrollTop = 0;
   libraryGrid.classList.toggle('compositions', tab === 'compositions');
+  libraryGrid.classList.remove('search-results');
   if (tab === 'compositions') {
     libraryHint.textContent = 'Des cartes postales déjà composées avec le modèle, pour trouver des idées. Chargez-en une puis modifiez-la : vignettes et textes restent déplaçables, modifiables et régénérables.';
     renderCompositions();
@@ -1393,6 +1394,19 @@ function libraryTile([, caption, english, paletteHex, tokenString]) {
   return item;
 }
 
+function resultSection(title, count, items, kind) {
+  const section = document.createElement('section');
+  section.className = `search-section ${kind}`;
+  const heading = document.createElement('h3');
+  heading.className = 'search-heading';
+  heading.innerHTML = `${escapeHTML(title)} <small>${escapeHTML(String(count))}</small>`;
+  const grid = document.createElement('div');
+  grid.className = 'search-grid';
+  grid.append(...items);
+  section.append(heading, grid);
+  return section;
+}
+
 // Lowercase, without accents, so "Épée" matches "epee".
 function normalizeSearch(value) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -1405,7 +1419,7 @@ function searchLibrary(query) {
   const singular = word => word.length > 3 ? word.replace(/(s|x)$/, '') : word;
   const words = normalizeSearch(query).split(/[^a-z0-9]+/).filter(Boolean).map(singular);
   libraryTabs.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', 'false'));
-  libraryGrid.classList.remove('compositions');
+  libraryGrid.classList.remove('compositions', 'search-results');
   libraryGrid.scrollTop = 0;
   const matches = [];
   libraryData.sprites.forEach(entry => {
@@ -1420,13 +1434,22 @@ function searchLibrary(query) {
     const haystack = normalizeSearch(`${composition.title} ${composition.category ?? ''} ${composition.sprites.map(item => item.name).join(' ')} ${(composition.texts ?? []).map(item => item.text).join(' ')}`);
     return words.every(word => haystack.includes(word));
   });
-  libraryGrid.replaceChildren(...cards.map(compositionTile), ...shown.map(match => libraryTile(match.entry)));
   const label = query.trim();
   if (matches.length || cards.length) {
+    // With an empty card, example cards come first (ideas to start from). Once a card is in progress,
+    // the person is most likely looking for a vignette to add, so vignettes come first.
+    const working = sprites.length > 0;
+    const vignetteSection = matches.length && resultSection(
+      'Vignettes', `${matches.length}${matches.length > shown.length ? ` (${shown.length} premières)` : ''}`,
+      shown.map(match => libraryTile(match.entry)), 'vignettes');
+    const cardSection = cards.length && resultSection('Cartes d’exemple', cards.length, cards.map(compositionTile), 'cards');
+    const sections = (working ? [vignetteSection, cardSection] : [cardSection, vignetteSection]).filter(Boolean);
+    libraryGrid.classList.add('search-results');
+    libraryGrid.replaceChildren(...sections);
     const parts = [];
-    if (cards.length) parts.push(`${cards.length} carte${cards.length > 1 ? 's' : ''}`);
-    if (matches.length) parts.push(`${matches.length} vignette${matches.length > 1 ? 's' : ''}${matches.length > shown.length ? ` (${shown.length} premières affichées)` : ''}`);
-    libraryHint.textContent = `${parts.join(' et ')} pour « ${label} ». Cliquez pour la poser sur la carte.`;
+    if (matches.length) parts.push(`${matches.length} vignette${matches.length > 1 ? 's' : ''} à poser sur la carte`);
+    if (cards.length) parts.push(`${cards.length} carte${cards.length > 1 ? 's' : ''} d’exemple${working ? ' (elles remplacent la carte en cours)' : ''}`);
+    libraryHint.textContent = `Pour « ${label} » : ${(working ? parts : parts.reverse()).join(' et ')}.`;
     return;
   }
   libraryHint.textContent = `Aucune vignette pour « ${label} » dans la bibliothèque. Le modèle peut l'inventer :`;

@@ -27,7 +27,8 @@ compositions d'exemple, export 300 dpi, impression) et la galerie collective.
 | Élément | Auteur | Licence |
 | --- | --- | --- |
 | Modèle PixelGPT 24×24 (converti en ONNX) | [unstonio](https://github.com/unstonio/pixelgpt-24x24) | aucune publiée (voir ci-dessus) |
-| Vignettes de la bibliothèque | [PixelGPT 24×24 (20K)](https://huggingface.co/datasets/unstonio/pixelgpt-24x24-20k), unstonio | CC BY 4.0 |
+| Vignettes de la bibliothèque (familles) | [PixelGPT 24×24 (20K)](https://huggingface.co/datasets/unstonio/pixelgpt-24x24-20k), unstonio | CC BY 4.0 |
+| Cartes d'exemple (onglet Compositions) | composées pour l'atelier IAgora, vignettes générées par le modèle PixelGPT | — |
 | Palettes de couleurs | jeu d'entraînement PixelGPT, unstonio | voir ci-dessus |
 | Traduction français → anglais | [opus-mt-fr-en](https://huggingface.co/Helsinki-NLP/opus-mt-fr-en), Helsinki-NLP ; version ONNX [Xenova](https://huggingface.co/Xenova/opus-mt-fr-en) | CC BY 4.0 |
 | Compréhension du texte | [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2), sentence-transformers ; version ONNX Xenova | Apache 2.0 |
